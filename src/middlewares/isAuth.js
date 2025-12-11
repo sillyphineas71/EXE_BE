@@ -1,7 +1,8 @@
 const { verifyAccessToken } = require("../utils/jwt");
 const { User, Role } = require("../models");
 
-const unauthorized = (res) => res.status(401).json({ message: "Unauthorized" });
+const unauthorized = (res) =>
+  res.status(401).json({ message: "Không được phép" });
 
 const isAuth = async (req, res, next) => {
   try {

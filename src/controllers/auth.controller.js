@@ -9,6 +9,16 @@ const login = async (req, res, next) => {
   }
 };
 
+const register = async (req, res, next) => {
+  try {
+    const { user, token } = await AuthService.register(req.body);
+    return res.status(201).json({ user, token });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   login,
+  register,
 };

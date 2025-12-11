@@ -1,11 +1,11 @@
 const errorHandler = (err, req, res, next) => {
   if (!(err instanceof Error)) {
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 
   const status = err.statusCode || 500;
   const payload = {
-    message: status >= 500 ? "Internal server error" : err.message,
+    message: status >= 500 ? "Lỗi hệ thống" : err.message,
   };
 
   if (err.details && status < 500) {
