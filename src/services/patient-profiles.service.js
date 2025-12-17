@@ -1,4 +1,5 @@
-const { User, PatientProfile } = require("../models/index");
+const { Op } = require("sequelize");
+const { User, PatientProfile, ProfileShare } = require("../models/index");
 
 const httpError = (message, statusCode) => {
   const error = new Error(message);
@@ -35,6 +36,86 @@ const createPatientProfile = async (
   return newProfile;
 };
 
+const getAccessibleProfiles = async (currentUserId) => {
+  const profiles = await PatientProfile.findAll({
+    include: [
+      {
+        model: ProfileShare,
+        as: "shares",
+        required: false,
+        where: {
+          user_id: currentUserId,
+        },
+      },
+    ],
+    where: {
+      [Op.or]: [
+        { owner_user_id: currentUserId },
+        { "$shares.user_id$": currentUserId },
+      ],
+    },
+  });
+
+  const result = profiles.map((profile) => {
+    const p = profile.get({ plain: true });
+
+    let myRole = "";
+    if (p.owner_user_id === currentUserId) {
+      myRole = "OWNER";
+    } else if (p.shares && p.shares.length > 0) {
+      myRole = p.shares[0].role;
+    }
+    delete p.shares;
+    return {
+      ...p,
+      role: myRole.toUpperCase(),
+    };
+  });
+
+  return result;
+};
+const getProfileDetail = async (profileId, userId) => {
+  const profile = await PatientProfile.findOne({
+    where: {
+      id: profileId,
+      [Op.or]: [{ owner_user_id: userId }, { "$shares.user_id$": userId }],
+    },
+    include: [
+      {
+        model: ProfileShare,
+        as: "shares",
+        required: false,
+        where: {
+          user_id: userId,
+        },
+      },
+    ],
+  });
+
+  if (!profile) {
+    throw httpError(
+      "Hồ sơ không tồn tại hoặc bạn không có quyền truy cập",
+      404
+    );
+  }
+
+  const p = profile.get({ plain: true });
+  let currentRole = "";
+
+  if (p.owner_user_id === userId) {
+    currentRole = "OWNER";
+  } else if (p.shares && p.shares.length > 0) {
+    currentRole = p.shares[0].role;
+  }
+  delete p.shares;
+
+  return {
+    ...p,
+    role: currentRole.toUpperCase(),
+  };
+};
 module.exports = {
   createPatientProfile,
+  getAccessibleProfiles,
+  getProfileDetail,
 };
