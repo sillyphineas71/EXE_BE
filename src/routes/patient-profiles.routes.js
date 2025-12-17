@@ -10,4 +10,8 @@ router.post("/", isAuth, patientProfileController.createPatientProfile);
 router.get("/", isAuth, patientProfileController.getAccessibleProfiles);
 //GET /api/v1/patient-profiles/{profileId}
 router.get("/:profileId", isAuth, patientProfileController.getProfileDetail);
+//PATCH /api/v1/patient-profiles/{profileId}
+router.patch("/:profileId", isAuth, patientProfileController.updateProfile);
+//DELETE /api/v1/patient-profiles/{profileId}
+router.delete("/:profileId", isAuth, patientProfileController.deleteProfile);
 module.exports = router;

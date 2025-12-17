@@ -44,8 +44,39 @@ const getProfileDetail = async (req, res, next) => {
     return next(error);
   }
 };
+const updateProfile = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const profileId = req.params.profileId;
+    const { full_name, date_of_birth, sex, relationship_to_owner, notes } =
+      req.body;
+    const result = await PatientProfileController.updateProfile(
+      userId,
+      profileId,
+      { full_name, date_of_birth, sex, relationship_to_owner, notes }
+    );
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+const deleteProfile = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const profileId = req.params.profileId;
+    const result = await PatientProfileController.deleteProfile(
+      userId,
+      profileId
+    );
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+};
 module.exports = {
   createPatientProfile,
   getAccessibleProfiles,
   getProfileDetail,
+  updateProfile,
+  deleteProfile,
 };

@@ -114,8 +114,53 @@ const getProfileDetail = async (profileId, userId) => {
     role: currentRole.toUpperCase(),
   };
 };
+const updateProfile = async (
+  userId,
+  profileId,
+  { full_name, date_of_birth, sex, relationship_to_owner, notes }
+) => {
+  const profile = await PatientProfile.findByPk(profileId);
+
+  if (!profile) {
+    throw httpError("Hồ sơ bệnh nhân không tồn tại", 404);
+  }
+  console.log(profile);
+  console.log("profileId", userId);
+
+  if (String(profile.owner_user_id) !== String(userId)) {
+    throw httpError("Bạn không có quyền chỉnh sửa hồ sơ này", 403);
+  }
+
+  profile.full_name = full_name || profile.full_name;
+  profile.date_of_birth = date_of_birth || profile.date_of_birth;
+  profile.sex = sex || profile.sex;
+  profile.relationship_to_owner =
+    relationship_to_owner || profile.relationship_to_owner;
+  profile.notes = notes !== undefined ? notes : profile.notes;
+
+  const result = await profile.save();
+
+  return result;
+};
+const deleteProfile = async (userId, profileId) => {
+  const profile = await PatientProfile.findByPk(profileId);
+
+  if (!profile) {
+    throw httpError("Hồ sơ bệnh nhân không tồn tại", 404);
+  }
+
+  if (String(profile.owner_user_id) !== String(userId)) {
+    throw httpError("Bạn không có quyền xóa hồ sơ này", 403);
+  }
+
+  await profile.destroy();
+
+  return true;
+};
 module.exports = {
   createPatientProfile,
   getAccessibleProfiles,
   getProfileDetail,
+  updateProfile,
+  deleteProfile,
 };
