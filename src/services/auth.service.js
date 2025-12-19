@@ -18,6 +18,7 @@ const login = async ({ email, password }) => {
     sequelize.fn("LOWER", sequelize.col("email")),
     normalizedEmail
   );
+  console.log(`email ${email}, password: ${password}`);
 
   const user = await User.findOne({
     where: emailCondition,
