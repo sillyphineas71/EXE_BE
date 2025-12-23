@@ -199,8 +199,117 @@ const getPrescriptionById = async (userId, prescriptionId) => {
   };
 };
 
+const updatePrescriptionItem = async (userId, prescriptionId, itemId, data) => {
+  const item = await PrescriptionItem.findOne({
+    where: { id: itemId, prescription_id: prescriptionId },
+  });
+
+  if (!item) {
+    throw httpError("Không tìm thấy thuốc trong đơn", 404);
+  }
+
+  const prescription = await Prescription.findByPk(prescriptionId, {
+    include: [
+      {
+        model: PatientProfile,
+        as: "profile",
+        attributes: ["id", "owner_user_id"],
+      },
+    ],
+  });
+
+  if (!prescription || prescription.profile.owner_user_id !== userId) {
+    throw httpError("Bạn không có quyền chỉnh sửa đơn thuốc này", 403);
+  }
+
+  const updates = {};
+  const allowedFields = [
+    "original_name_text",
+    "original_instructions",
+    "drug_product_id",
+    "substance_id",
+    "dose_amount",
+    "dose_unit",
+    "frequency_text",
+    "route",
+    "duration_days",
+    "start_date",
+    "end_date",
+    "is_prn",
+    "notes",
+  ];
+
+  allowedFields.forEach((field) => {
+    if (data.hasOwnProperty(field)) {
+      if (field === "original_name_text" && data[field]) {
+        updates[field] = data[field].trim();
+      } else {
+        updates[field] = data[field] || null;
+      }
+    }
+  });
+
+  if (updates.original_name_text && !updates.original_name_text.trim()) {
+    throw httpError("Tên thuốc không được để trống", 400);
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw httpError("Không có dữ liệu để cập nhật", 400);
+  }
+
+  await item.update(updates);
+  await item.reload();
+
+  const result = item.get({ plain: true });
+  return {
+    id: result.id,
+    prescription_id: result.prescription_id,
+    original_name_text: result.original_name_text,
+    original_instructions: result.original_instructions,
+    drug_product_id: result.drug_product_id,
+    substance_id: result.substance_id,
+    dose_amount: result.dose_amount,
+    dose_unit: result.dose_unit,
+    frequency_text: result.frequency_text,
+    route: result.route,
+    duration_days: result.duration_days,
+    start_date: result.start_date,
+    end_date: result.end_date,
+    is_prn: result.is_prn,
+    notes: result.notes,
+  };
+};
+
+const deletePrescriptionItem = async (userId, prescriptionId, itemId) => {
+  const item = await PrescriptionItem.findOne({
+    where: { id: itemId, prescription_id: prescriptionId },
+  });
+
+  if (!item) {
+    throw httpError("Không tìm thấy thuốc trong đơn", 404);
+  }
+
+  const prescription = await Prescription.findByPk(prescriptionId, {
+    include: [
+      {
+        model: PatientProfile,
+        as: "profile",
+        attributes: ["id", "owner_user_id"],
+      },
+    ],
+  });
+
+  if (!prescription || prescription.profile.owner_user_id !== userId) {
+    throw httpError("Bạn không có quyền xoá thuốc trong đơn này", 403);
+  }
+
+  await item.destroy();
+};
+
 module.exports = {
   createPrescription,
   addPrescriptionItem,
   getPrescriptionById,
+  updatePrescriptionItem,
+  deletePrescriptionItem,
 };

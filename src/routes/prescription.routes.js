@@ -22,4 +22,16 @@ router.post(
   prescriptionController.addPrescriptionItem
 );
 
+router.patch(
+  "/prescriptions/:prescriptionId/items/:itemId",
+  isAuth,
+  prescriptionController.updatePrescriptionItem
+);
+
+router.delete(
+  "/prescriptions/:prescriptionId/items/:itemId",
+  isAuth,
+  prescriptionController.deletePrescriptionItem
+);
+
 module.exports = router;
