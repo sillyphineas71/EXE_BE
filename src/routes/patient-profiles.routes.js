@@ -1,6 +1,7 @@
 const express = require("express");
 const isAuth = require("../middlewares/isAuth");
 const patientProfileController = require("../controllers/patient-profiles.controller");
+const MedicationRegimensController = require("../controllers/medication-regimens.controller");
 
 const router = express.Router();
 
@@ -14,4 +15,24 @@ router.get("/:profileId", isAuth, patientProfileController.getProfileDetail);
 router.patch("/:profileId", isAuth, patientProfileController.updateProfile);
 //DELETE /api/v1/patient-profiles/{profileId}
 router.delete("/:profileId", isAuth, patientProfileController.deleteProfile);
+//------------------------------
+//5. MEDICATION
+// POST /api/v1/patient-profiles/{profileId}/regimens
+router.post(
+  "/:profileId/regimens",
+  isAuth,
+  MedicationRegimensController.createRegimes
+);
+// GET /api/v1/patient-profiles/{profileId}/regimens
+router.get(
+  "/:profileId/regimens",
+  isAuth,
+  MedicationRegimensController.getRegimensByProfile
+);
+// GET /api/v1/regimens/{regimenId}
+router.get(
+  "/:profileId/regimens",
+  isAuth,
+  MedicationRegimensController.getRegimensByProfile
+);
 module.exports = router;
