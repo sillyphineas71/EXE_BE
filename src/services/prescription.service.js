@@ -306,10 +306,81 @@ const deletePrescriptionItem = async (userId, prescriptionId, itemId) => {
   await item.destroy();
 };
 
+const updatePrescription = async (userId, prescriptionId, data) => {
+  const prescription = await Prescription.findByPk(prescriptionId, {
+    include: [
+      {
+        model: PatientProfile,
+        as: "profile",
+        attributes: ["id", "owner_user_id"],
+      },
+    ],
+  });
+
+  if (!prescription) {
+    throw httpError("Không tìm thấy đơn thuốc", 404);
+  }
+
+  if (prescription.profile.owner_user_id !== userId) {
+    throw httpError("Bạn không có quyền chỉnh sửa đơn thuốc này", 403);
+  }
+
+  const updates = {};
+  const allowedFields = [
+    "prescriber_name",
+    "prescriber_specialty",
+    "facility_name",
+    "issued_date",
+    "note",
+    "status",
+  ];
+
+  allowedFields.forEach((field) => {
+    if (data.hasOwnProperty(field)) {
+      updates[field] = data[field] || null;
+    }
+  });
+
+  if (
+    data.status &&
+    !["active", "completed", "cancelled"].includes(data.status)
+  ) {
+    throw httpError(
+      "Trạng thái không hợp lệ. Chỉ chấp nhận: active, completed, cancelled",
+      400
+    );
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw httpError("Không có dữ liệu để cập nhật", 400);
+  }
+
+  updates.updated_at = new Date();
+  await prescription.update(updates);
+  await prescription.reload();
+
+  const result = prescription.get({ plain: true });
+  return {
+    id: result.id,
+    profile_id: result.profile_id,
+    prescriber_name: result.prescriber_name,
+    prescriber_specialty: result.prescriber_specialty,
+    facility_name: result.facility_name,
+    issued_date: result.issued_date,
+    note: result.note,
+    source_type: result.source_type,
+    status: result.status,
+    created_by_user_id: result.created_by_user_id,
+    created_at: result.created_at,
+    updated_at: result.updated_at,
+  };
+};
+
 module.exports = {
   createPrescription,
   addPrescriptionItem,
   getPrescriptionById,
   updatePrescriptionItem,
   deletePrescriptionItem,
+  updatePrescription,
 };

@@ -70,10 +70,25 @@ const deletePrescriptionItem = async (req, res, next) => {
   }
 };
 
+const updatePrescription = async (req, res, next) => {
+  try {
+    const { prescriptionId } = req.params;
+    const prescription = await prescriptionService.updatePrescription(
+      req.user.id,
+      prescriptionId,
+      req.body
+    );
+    return res.json(prescription);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   createPrescription,
   addPrescriptionItem,
   getPrescriptionById,
   updatePrescriptionItem,
   deletePrescriptionItem,
+  updatePrescription,
 };

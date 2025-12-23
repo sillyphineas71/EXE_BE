@@ -16,6 +16,12 @@ router.get(
   prescriptionController.getPrescriptionById
 );
 
+router.patch(
+  "/prescriptions/:prescriptionId",
+  isAuth,
+  prescriptionController.updatePrescription
+);
+
 router.post(
   "/prescriptions/:prescriptionId/items",
   isAuth,
