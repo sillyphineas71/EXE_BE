@@ -10,4 +10,15 @@ router.get(
   isAuth,
   MedicationRegimensController.getRegimenDetail
 );
+
+//PATCH /api/v1/regimens/{regimenId}
+router.patch("/:regimenId", isAuth, MedicationRegimensController.updateRegimen);
+
+//PATCH /api/v1/regimens/{regimenId}/stop
+router.patch(
+  "/:regimenId/stop",
+  isAuth,
+  MedicationRegimensController.stopRegimen
+);
+
 module.exports = router;

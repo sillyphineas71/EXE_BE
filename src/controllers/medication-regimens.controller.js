@@ -46,8 +46,38 @@ const getRegimenDetail = async (req, res, next) => {
     return next(error);
   }
 };
+const updateRegimen = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const regimenId = req.params.regimenId;
+    const data = req.body;
+    const result = await MedicationRegimensService.updateRegimen(
+      userId,
+      regimenId,
+      data
+    );
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+const stopRegimen = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const regimenId = req.params.regimenId;
+    const result = await MedicationRegimensService.stopRegimen(
+      userId,
+      regimenId
+    );
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+};
 module.exports = {
   createRegimes,
   getRegimensByProfile,
   getRegimenDetail,
+  updateRegimen,
+  stopRegimen,
 };

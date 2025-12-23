@@ -133,4 +133,69 @@ const getRegimenDetail = async (userId, regimenId) => {
 
   return regimen;
 };
-module.exports = { createRegimes, getRegimensByProfile, getRegimenDetail };
+const updateRegimen = async (userId, regimenId, data) => {
+  const regimen = await MedicationRegimen.findByPk(regimenId);
+  if (!regimen) {
+    throw httpError("Kế hoạch dùng thuốc không tồn tại", 404);
+  }
+  await checkAccess(userId, regimen.profile_id);
+
+  const {
+    display_name,
+    total_daily_dose,
+    dose_unit,
+    start_date,
+    end_date,
+    schedule_type,
+    schedule_payload,
+    timezone,
+  } = data;
+
+  if (
+    schedule_type &&
+    !["fixed_times", "interval_hours", "custom"].includes(schedule_type)
+  ) {
+    throw httpError("Loại lịch (schedule_type) không hợp lệ", 400);
+  }
+
+  if (display_name !== undefined) regimen.display_name = display_name;
+  if (total_daily_dose !== undefined)
+    regimen.total_daily_dose = total_daily_dose;
+  if (dose_unit !== undefined) regimen.dose_unit = dose_unit;
+  if (start_date !== undefined) regimen.start_date = start_date;
+  if (end_date !== undefined) regimen.end_date = end_date;
+  if (schedule_type !== undefined) regimen.schedule_type = schedule_type;
+  if (schedule_payload !== undefined)
+    regimen.schedule_payload = schedule_payload;
+  if (timezone !== undefined) regimen.timezone = timezone;
+
+  await regimen.save();
+  return regimen;
+};
+const stopRegimen = async (userId, regimenId) => {
+  const regimen = await MedicationRegimen.findByPk(regimenId);
+
+  if (!regimen) {
+    throw httpError("Kế hoạch dùng thuốc không tồn tại", 404);
+  }
+  await checkAccess(userId, regimen.profile_id);
+
+  if (regimen.is_active === false) {
+    throw httpError("Thuốc này đã được ngừng trước đó rồi", 400);
+  }
+
+  regimen.is_active = false;
+
+  regimen.end_date = new Date();
+
+  await regimen.save();
+
+  return true;
+};
+module.exports = {
+  createRegimes,
+  getRegimensByProfile,
+  getRegimenDetail,
+  updateRegimen,
+  stopRegimen,
+};
