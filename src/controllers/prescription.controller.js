@@ -14,6 +14,21 @@ const createPrescription = async (req, res, next) => {
   }
 };
 
+const addPrescriptionItem = async (req, res, next) => {
+  try {
+    const { prescriptionId } = req.params;
+    const item = await prescriptionService.addPrescriptionItem(
+      req.user.id,
+      prescriptionId,
+      req.body
+    );
+    return res.status(201).json(item);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   createPrescription,
+  addPrescriptionItem,
 };

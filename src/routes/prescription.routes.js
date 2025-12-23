@@ -10,4 +10,10 @@ router.post(
   prescriptionController.createPrescription
 );
 
+router.post(
+  "/prescriptions/:prescriptionId/items",
+  isAuth,
+  prescriptionController.addPrescriptionItem
+);
+
 module.exports = router;

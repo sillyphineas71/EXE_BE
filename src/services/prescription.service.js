@@ -1,4 +1,4 @@
-const { Prescription, PatientProfile } = require("../models");
+const { Prescription, PatientProfile, PrescriptionItem } = require("../models");
 
 const httpError = (message, statusCode) => {
   const error = new Error(message);
@@ -53,6 +53,83 @@ const createPrescription = async (userId, profileId, data) => {
   };
 };
 
+const addPrescriptionItem = async (userId, prescriptionId, data) => {
+  const prescription = await Prescription.findByPk(prescriptionId, {
+    include: [
+      {
+        model: PatientProfile,
+        as: "profile",
+        attributes: ["id", "owner_user_id"],
+      },
+    ],
+  });
+
+  if (!prescription) {
+    throw httpError("Không tìm thấy đơn thuốc", 404);
+  }
+
+  if (prescription.profile.owner_user_id !== userId) {
+    throw httpError("Bạn không có quyền truy cập đơn thuốc này", 403);
+  }
+
+  const {
+    original_name_text,
+    original_instructions,
+    drug_product_id,
+    substance_id,
+    dose_amount,
+    dose_unit,
+    frequency_text,
+    route,
+    duration_days,
+    start_date,
+    end_date,
+    is_prn = false,
+    notes,
+  } = data;
+
+  if (!original_name_text || !original_name_text.trim()) {
+    throw httpError("Tên thuốc là bắt buộc", 400);
+  }
+
+  const item = await PrescriptionItem.create({
+    prescription_id: prescriptionId,
+    original_name_text: original_name_text.trim(),
+    original_instructions: original_instructions || null,
+    drug_product_id: drug_product_id || null,
+    substance_id: substance_id || null,
+    dose_amount: dose_amount || null,
+    dose_unit: dose_unit || null,
+    frequency_text: frequency_text || null,
+    route: route || null,
+    duration_days: duration_days || null,
+    start_date: start_date || null,
+    end_date: end_date || null,
+    is_prn,
+    notes: notes || null,
+  });
+
+  const result = item.get({ plain: true });
+  return {
+    id: result.id,
+    prescription_id: result.prescription_id,
+    original_name_text: result.original_name_text,
+    original_instructions: result.original_instructions,
+    drug_product_id: result.drug_product_id,
+    substance_id: result.substance_id,
+    dose_amount: result.dose_amount,
+    dose_unit: result.dose_unit,
+    frequency_text: result.frequency_text,
+    route: result.route,
+    duration_days: result.duration_days,
+    start_date: result.start_date,
+    end_date: result.end_date,
+    is_prn: result.is_prn,
+    notes: result.notes,
+  };
+};
+
 module.exports = {
   createPrescription,
+  addPrescriptionItem,
 };
