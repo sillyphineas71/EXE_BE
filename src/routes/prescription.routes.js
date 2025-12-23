@@ -10,6 +10,12 @@ router.post(
   prescriptionController.createPrescription
 );
 
+router.get(
+  "/prescriptions/:prescriptionId",
+  isAuth,
+  prescriptionController.getPrescriptionById
+);
+
 router.post(
   "/prescriptions/:prescriptionId/items",
   isAuth,

@@ -1,4 +1,9 @@
-const { Prescription, PatientProfile, PrescriptionItem } = require("../models");
+const {
+  Prescription,
+  PatientProfile,
+  PrescriptionItem,
+  PrescriptionFile,
+} = require("../models");
 
 const httpError = (message, statusCode) => {
   const error = new Error(message);
@@ -129,7 +134,73 @@ const addPrescriptionItem = async (userId, prescriptionId, data) => {
   };
 };
 
+const getPrescriptionById = async (userId, prescriptionId) => {
+  const prescription = await Prescription.findByPk(prescriptionId, {
+    include: [
+      {
+        model: PatientProfile,
+        as: "profile",
+        attributes: ["id", "owner_user_id", "full_name"],
+      },
+      {
+        model: PrescriptionItem,
+        as: "items",
+        attributes: [
+          "id",
+          "original_name_text",
+          "original_instructions",
+          "drug_product_id",
+          "substance_id",
+          "dose_amount",
+          "dose_unit",
+          "frequency_text",
+          "route",
+          "duration_days",
+          "start_date",
+          "end_date",
+          "is_prn",
+          "notes",
+        ],
+      },
+      {
+        model: PrescriptionFile,
+        as: "files",
+        attributes: ["id", "file_url", "file_type", "created_at"],
+      },
+    ],
+  });
+
+  if (!prescription) {
+    throw httpError("Không tìm thấy đơn thuốc", 404);
+  }
+
+  if (prescription.profile.owner_user_id !== userId) {
+    throw httpError("Bạn không có quyền truy cập đơn thuốc này", 403);
+  }
+
+  const plain = prescription.get({ plain: true });
+  return {
+    prescription: {
+      id: plain.id,
+      profile_id: plain.profile_id,
+      prescriber_name: plain.prescriber_name,
+      prescriber_specialty: plain.prescriber_specialty,
+      facility_name: plain.facility_name,
+      issued_date: plain.issued_date,
+      note: plain.note,
+      source_type: plain.source_type,
+      status: plain.status,
+      created_by_user_id: plain.created_by_user_id,
+      created_at: plain.created_at,
+      updated_at: plain.updated_at,
+    },
+    items: plain.items || [],
+    files: plain.files || [],
+  };
+};
+
 module.exports = {
   createPrescription,
   addPrescriptionItem,
+  getPrescriptionById,
 };
