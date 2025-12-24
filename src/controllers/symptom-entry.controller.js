@@ -15,4 +15,38 @@ const createSymptomEntry = async (req, res, next) => {
     return next(error);
   }
 };
-module.exports = { createSymptomEntry };
+const getSymptomsByProfile = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { profileId } = req.params;
+    const { from, to, limit, offset } = req.query;
+
+    const result = await SymptomEntryService.getSymptomsByProfile(
+      userId,
+      profileId,
+      { from, to, limit, offset }
+    );
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+const getSymptomDetail = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const symptomId = req.params.symptomId;
+
+    const result = await SymptomEntryService.getSymptomDetail(
+      userId,
+      symptomId
+    );
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+module.exports = {
+  createSymptomEntry,
+  getSymptomsByProfile,
+  getSymptomDetail,
+};

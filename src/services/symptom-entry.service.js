@@ -98,7 +98,6 @@ const createSymptomEntry = async (userId, profileId, data) => {
 
     finalRecordedAt = parsedDate;
   }
-  // ------------------------------------
 
   const t = await sequelize.transaction();
 
@@ -107,7 +106,6 @@ const createSymptomEntry = async (userId, profileId, data) => {
       {
         profile_id: profileId,
         symptom_name,
-        // 2. Sử dụng biến thời gian đã xử lý ở trên
         recorded_at: finalRecordedAt,
         severity_score,
         relation_to_med,
@@ -139,6 +137,123 @@ const createSymptomEntry = async (userId, profileId, data) => {
     throw error;
   }
 };
+
+const getSymptomsByProfile = async (
+  userId,
+  profileId,
+  { from, to, limit = 20, offset = 0 }
+) => {
+  await checkAccess(userId, profileId);
+
+  const where = {
+    profile_id: profileId,
+  };
+
+  if (from || to) {
+    where.recorded_at = {};
+    if (from) {
+      where.recorded_at[Op.gte] = new Date(from);
+    }
+    if (to) {
+      where.recorded_at[Op.lte] = new Date(to);
+    }
+  }
+
+  const parsedLimit = Math.min(parseInt(limit) || 20, 100);
+  const parsedOffset = parseInt(offset) || 0;
+
+  const { count, rows } = await SymptomEntry.findAndCountAll({
+    where,
+    limit: parsedLimit,
+    offset: parsedOffset,
+    order: [["recorded_at", "DESC"]],
+    distinct: true,
+
+    include: [
+      {
+        model: MedicationRegimen,
+        as: "regimens",
+        attributes: ["id", "display_name", "drug_product_id"],
+
+        through: {
+          attributes: ["note"],
+        },
+      },
+    ],
+  });
+  const formattedData = rows.map((entry) => {
+    const plain = entry.get({ plain: true });
+
+    return {
+      id: plain.id,
+      profile_id: plain.profile_id,
+      symptom_name: plain.symptom_name,
+      recorded_at: plain.recorded_at,
+      severity_score: plain.severity_score,
+      relation_to_med: plain.relation_to_med,
+      description: plain.description,
+      notes: plain.notes,
+      linked_regimens: (plain.regimens || []).map((link) => ({
+        regimen_id: link.id,
+        display_name: link.regimen?.display_name || "Thuốc không xác định",
+        drug_product_id: link.drug_product_id,
+        note: link.SymptomMedicationLink.note,
+      })),
+    };
+  });
+
+  return formattedData;
+};
+const getSymptomDetail = async (userId, symptomId) => {
+  const symptom = await SymptomEntry.findByPk(symptomId, {
+    include: [
+      {
+        model: MedicationRegimen,
+        as: "regimens",
+        attributes: [
+          "id",
+          "display_name",
+          "drug_product_id",
+          "dose_unit",
+          "total_daily_dose",
+        ],
+        through: {
+          attributes: ["note"],
+        },
+      },
+    ],
+  });
+
+  if (!symptom) {
+    throw httpError("Triệu chứng không tồn tại", 404);
+  }
+
+  await checkAccess(userId, symptom.profile_id);
+
+  const plain = symptom.get({ plain: true });
+
+  return {
+    id: plain.id,
+    profile_id: plain.profile_id,
+    symptom_name: plain.symptom_name,
+    recorded_at: plain.recorded_at,
+    severity_score: plain.severity_score,
+    relation_to_med: plain.relation_to_med,
+    description: plain.description,
+    notes: plain.notes,
+    created_at: plain.created_at,
+    linked_regimens: (plain.regimens || []).map((r) => ({
+      regimen_id: r.id,
+      display_name: r.display_name,
+      drug_product_id: r.drug_product_id,
+      total_daily_dose: r.total_daily_dose,
+      dose_unit: r.dose_unit,
+      link_note: r.SymptomMedicationLink ? r.SymptomMedicationLink.note : null,
+    })),
+  };
+};
 module.exports = {
   createSymptomEntry,
+  getSymptomsByProfile,
+  getSymptomDetail,
 };

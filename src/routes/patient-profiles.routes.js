@@ -45,5 +45,10 @@ router.post(
   isAuth,
   SymptomEntryController.createSymptomEntry
 );
-
+//GET /api/v1/patient-profiles/{profileId}/symptoms
+router.get(
+  "/:profileId/symptoms",
+  isAuth,
+  SymptomEntryController.getSymptomsByProfile
+);
 module.exports = router;
