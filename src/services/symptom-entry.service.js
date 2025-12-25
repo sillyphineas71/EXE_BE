@@ -197,7 +197,7 @@ const getSymptomsByProfile = async (
         regimen_id: link.id,
         display_name: link.regimen?.display_name || "Thuốc không xác định",
         drug_product_id: link.drug_product_id,
-        note: link.SymptomMedicationLink.note,
+        link_note: link.SymptomMedicationLink.note,
       })),
     };
   });
@@ -252,8 +252,170 @@ const getSymptomDetail = async (userId, symptomId) => {
     })),
   };
 };
+const updateSymptom = async (userId, symptomId, data) => {
+  const {
+    symptom_name,
+    severity_score,
+    relation_to_med,
+    description,
+    notes,
+    recorded_at,
+    related_regimen_ids,
+  } = data;
+
+  const symptom = await SymptomEntry.findByPk(symptomId);
+  if (!symptom) {
+    throw httpError("Triệu chứng không tồn tại", 404);
+  }
+
+  await checkAccess(userId, symptom.profile_id);
+
+  if (symptom_name !== undefined && !symptom_name) {
+    throw httpError("Tên triệu chứng không được để trống", 400);
+  }
+  if (
+    severity_score !== undefined &&
+    (severity_score < 0 || severity_score > 10)
+  ) {
+    throw httpError("Mức độ phải từ 0-10", 400);
+  }
+
+  let finalRecordedAt;
+  if (recorded_at) {
+    const parsedDate = new Date(recorded_at);
+    if (isNaN(parsedDate.getTime()))
+      throw httpError("Thời gian không hợp lệ", 400);
+    if (parsedDate > new Date(Date.now() + 5 * 60000))
+      throw httpError("Thời gian không thể ở tương lai", 400);
+    finalRecordedAt = parsedDate;
+  }
+  if (
+    related_regimen_ids &&
+    Array.isArray(related_regimen_ids) &&
+    related_regimen_ids.length > 0
+  ) {
+    const validCount = await MedicationRegimen.count({
+      where: {
+        id: related_regimen_ids,
+        profile_id: symptom.profile_id,
+      },
+    });
+    const uniqueInputIds = new Set(related_regimen_ids);
+    if (validCount !== uniqueInputIds.size) {
+      throw httpError(
+        "Danh sách thuốc chứa ID không hợp lệ hoặc không thuộc hồ sơ này",
+        400
+      );
+    }
+  }
+
+  const t = await sequelize.transaction();
+
+  try {
+    await symptom.update(
+      {
+        symptom_name:
+          symptom_name !== undefined ? symptom_name : symptom.symptom_name,
+        severity_score:
+          severity_score !== undefined
+            ? severity_score
+            : symptom.severity_score,
+        relation_to_med:
+          relation_to_med !== undefined
+            ? relation_to_med
+            : symptom.relation_to_med,
+        description:
+          description !== undefined ? description : symptom.description,
+        notes: notes !== undefined ? notes : symptom.notes,
+        recorded_at: finalRecordedAt || symptom.recorded_at,
+      },
+      { transaction: t }
+    );
+
+    if (
+      related_regimen_ids !== undefined &&
+      Array.isArray(related_regimen_ids)
+    ) {
+      await SymptomMedicationLink.destroy({
+        where: { symptom_entry_id: symptomId },
+        transaction: t,
+      });
+
+      if (related_regimen_ids.length > 0) {
+        const uniqueIds = [...new Set(related_regimen_ids)];
+        const linkData = uniqueIds.map((regimenId) => ({
+          symptom_entry_id: symptomId,
+          regimen_id: regimenId,
+          note: null,
+        }));
+
+        await SymptomMedicationLink.bulkCreate(linkData, { transaction: t });
+      }
+    }
+    await t.commit();
+    const updatedSymptomWithRegimens = await SymptomEntry.findByPk(symptomId, {
+      include: [
+        {
+          model: MedicationRegimen,
+          as: "regimens",
+          attributes: [
+            "id",
+            "display_name",
+            "drug_product_id",
+            "total_daily_dose",
+            "dose_unit",
+          ],
+          through: {
+            attributes: ["note"],
+          },
+        },
+      ],
+    });
+
+    const plain = updatedSymptomWithRegimens.get({ plain: true });
+
+    return {
+      id: plain.id,
+      profile_id: plain.profile_id,
+      symptom_name: plain.symptom_name,
+      recorded_at: plain.recorded_at,
+      severity_score: plain.severity_score,
+      relation_to_med: plain.relation_to_med,
+      description: plain.description,
+      notes: plain.notes,
+      created_at: plain.created_at,
+      linked_regimens: (plain.regimens || []).map((r) => ({
+        regimen_id: r.id,
+        display_name: r.display_name,
+        drug_product_id: r.drug_product_id,
+        total_daily_dose: r.total_daily_dose,
+        dose_unit: r.dose_unit,
+        link_note: r.SymptomMedicationLink
+          ? r.SymptomMedicationLink.note
+          : null,
+      })),
+    };
+  } catch (error) {
+    await t.rollback();
+    throw error;
+  }
+};
+
+const deleteSymptom = async (userId, symptomId) => {
+  const symptom = await SymptomEntry.findByPk(symptomId);
+
+  if (!symptom) {
+    throw httpError("Triệu chứng không tồn tại", 404);
+  }
+  await checkAccess(userId, symptom.profile_id);
+  await symptom.destroy();
+
+  return true;
+};
 module.exports = {
   createSymptomEntry,
   getSymptomsByProfile,
   getSymptomDetail,
+  updateSymptom,
+  deleteSymptom,
 };
