@@ -4,6 +4,8 @@ const authRoutes = require("./auth.routes");
 const patientRoutes = require("./patient-profiles.routes");
 const regimenRoutes = require("./medication-regimens.routes");
 const symptomRoutes = require("./symptom-entry.routes");
+const legalDocumentRoutes = require("./legal.routes");
+const legalAcceptanceRoutes = require("./legal-acceptance.routes");
 const router = express.Router();
 
 router.use("/auth", authRoutes);
@@ -11,5 +13,6 @@ router.use("/auth", authRoutes);
 router.use("/patient-profiles", patientRoutes);
 router.use("/regimens", regimenRoutes);
 router.use("/symptoms", symptomRoutes);
-
+router.use("/legal-documents", legalDocumentRoutes);
+router.use("/legal-acceptances", legalAcceptanceRoutes);
 module.exports = router;
