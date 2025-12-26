@@ -2,6 +2,7 @@ const express = require("express");
 const isAuth = require("../middlewares/isAuth");
 const patientProfileController = require("../controllers/patient-profiles.controller");
 const MedicationRegimensController = require("../controllers/medication-regimens.controller");
+const SymptomEntryController = require("../controllers/symptom-entry.controller");
 
 const router = express.Router();
 
@@ -34,5 +35,20 @@ router.get(
   "/:profileId/regimens",
   isAuth,
   MedicationRegimensController.getRegimensByProfile
+);
+//-----------------------------------
+//7.SYMPTOMS
+
+//POST /api/v1/patient-profiles/{profileId}/symptoms
+router.post(
+  "/:profileId/symptoms",
+  isAuth,
+  SymptomEntryController.createSymptomEntry
+);
+//GET /api/v1/patient-profiles/{profileId}/symptoms
+router.get(
+  "/:profileId/symptoms",
+  isAuth,
+  SymptomEntryController.getSymptomsByProfile
 );
 module.exports = router;
