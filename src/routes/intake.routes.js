@@ -13,7 +13,7 @@ router.get(
 router.get(
   "/patient-profiles/:profileId/intake-events/summary",
   isAuth,
-  intakeController.getIntakeAdherenceSummary
+  intakeController.listIntakeEventsForSummary
 );
 
 router.patch(
