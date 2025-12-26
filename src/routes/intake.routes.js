@@ -10,6 +10,12 @@ router.get(
   intakeController.listIntakeEventsInRange
 );
 
+router.get(
+  "/patient-profiles/:profileId/intake-events/summary",
+  isAuth,
+  intakeController.getIntakeAdherenceSummary
+);
+
 router.patch(
   "/intake-events/:intakeEventId",
   isAuth,

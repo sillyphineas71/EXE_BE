@@ -9,8 +9,8 @@ const listIntakeEventsInRange = async (req, res, next) => {
       req.query
     );
     return res.json(events);
-  } catch (error) {
-    return next(error);
+  } catch (e) {
+    return next(e);
   }
 };
 
@@ -23,12 +23,27 @@ const updateIntakeEventCheckin = async (req, res, next) => {
       req.body
     );
     return res.json(updated);
-  } catch (error) {
-    return next(error);
+  } catch (e) {
+    return next(e);
+  }
+};
+
+const getIntakeAdherenceSummary = async (req, res, next) => {
+  try {
+    const { profileId } = req.params;
+    const summary = await intakeService.getIntakeAdherenceSummary(
+      req.user.id,
+      profileId,
+      req.query
+    );
+    return res.json(summary);
+  } catch (e) {
+    return next(e);
   }
 };
 
 module.exports = {
   listIntakeEventsInRange,
   updateIntakeEventCheckin,
+  getIntakeAdherenceSummary,
 };
