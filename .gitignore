@@ -2,6 +2,7 @@
 node_modules/
 *.json
 src/config/serviceAccountKey.json
+src/scripts/
 # Logs
 logs/
 *.log
