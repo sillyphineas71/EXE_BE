@@ -1,4 +1,5 @@
 const MedicationRegimensService = require("../services/medication-regimens.service");
+const schedulerService = require("../services/scheduler.service");
 
 const createRegimes = async (req, res, next) => {
   try {
@@ -10,6 +11,7 @@ const createRegimes = async (req, res, next) => {
       profileId,
       data
     );
+    await schedulerService.scheduleRemindersForRegimen(result);
     return res.json(result);
   } catch (error) {
     return next(error);
@@ -56,6 +58,9 @@ const updateRegimen = async (req, res, next) => {
       regimenId,
       data
     );
+    if (result && result.is_active) {
+      await schedulerService.scheduleRemindersForRegimen(result);
+    }
     return res.json(result);
   } catch (error) {
     return next(error);

@@ -74,7 +74,9 @@ const handleFixedTimes = async (regimen, now, endOfDay, tz) => {
     return;
   }
   const doseInfo = regimen.total_daily_dose
-    ? `${regimen.total_daily_dose} ${regimen.dose_unit || ""}`.trim()
+    ? `${parseFloat(regimen.total_daily_dose)} ${
+        regimen.dose_unit || ""
+      }`.trim()
     : "theo chỉ định";
 
   for (const timeStr of times) {

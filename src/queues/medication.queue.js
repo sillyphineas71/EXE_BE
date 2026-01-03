@@ -7,7 +7,7 @@ const medicationQueue = new Queue("medication-reminders", {
     attempts: 3,
     backoff: {
       type: "exponential",
-      delay: 5000,
+      delay: 2000,
     },
     removeOnComplete: true,
   },
