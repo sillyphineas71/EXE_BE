@@ -54,7 +54,6 @@ const processMedicationJob = async (job) => {
         where: { user_id: userId, profile_id: null },
       });
     }
-    console.log("NotificationPreference: ", pref);
     const allowPush = pref ? pref.allow_push : true;
     const timezone = pref ? pref.timezone : "Asia/Ho_Chi_Minh";
     const quietStart = pref ? pref.quiet_hours_start : null;

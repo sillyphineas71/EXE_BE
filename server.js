@@ -4,6 +4,7 @@ const { connectDatabase } = require("./src/config/database");
 const apiRouter = require("./src/routes");
 const errorHandler = require("./src/middlewares/errorHandler");
 const initWorkers = require("./src/workers/index");
+const initCronJobs = require("./src/cron/index");
 require("./src/models");
 
 const app = express();
@@ -16,6 +17,7 @@ const start = async () => {
   try {
     await connectDatabase();
     initWorkers();
+    initCronJobs();
     app.listen(config.port, () => {
       console.log(`API listening on port ${config.port}`);
     });
