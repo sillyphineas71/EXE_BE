@@ -8,6 +8,7 @@ const regimenRoutes = require("./medication-regimens.routes");
 const symptomRoutes = require("./symptom-entry.routes");
 const legalDocumentRoutes = require("./legal.routes");
 const legalAcceptanceRoutes = require("./legal-acceptance.routes");
+const pushDeviceRoutes = require("./push-device.routes");
 const router = express.Router();
 
 router.use("/auth", authRoutes);
@@ -20,4 +21,5 @@ router.use("/regimens", regimenRoutes);
 router.use("/symptoms", symptomRoutes);
 router.use("/legal-documents", legalDocumentRoutes);
 router.use("/legal-acceptances", legalAcceptanceRoutes);
+router.use("/push-devices", pushDeviceRoutes);
 module.exports = router;
