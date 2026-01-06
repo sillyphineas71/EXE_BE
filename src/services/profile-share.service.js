@@ -33,6 +33,10 @@ const checkAccess = async (userId, profileId) => {
 const createProfileShare = async (userId, profileId, data) => {
   await checkAccess(userId, profileId);
   const { user_email, role } = data;
+  const profile = await PatientProfile.findByPk(profileId);
+  if (!profile) {
+    throw httpError("Hồ sơ bệnh nhân không tồn tại", 404);
+  }
   const user = await User.findOne({ where: { email: user_email } });
   if (!user) {
     throw httpError(
@@ -61,6 +65,10 @@ const createProfileShare = async (userId, profileId, data) => {
 };
 const getUserOfProfileShare = async (userId, profileId) => {
   await checkAccess(userId, profileId);
+  const profile = await PatientProfile.findByPk(profileId);
+  if (!profile) {
+    throw httpError("Hồ sơ bệnh nhân không tồn tại", 404);
+  }
   const profileShares = await ProfileShare.findAll({
     where: { profile_id: profileId },
     include: {
@@ -90,6 +98,16 @@ const getUserOfProfileShare = async (userId, profileId) => {
 };
 const updateProfileShare = async (userId, profileId, shareId, data) => {
   await checkAccess(userId, profileId);
+  const profile = await PatientProfile.findByPk(profileId);
+  if (!profile) {
+    throw httpError("Hồ sơ bệnh nhân không tồn tại", 404);
+  }
+  if (profile.owner_user_id != userId) {
+    throw httpError(
+      "Bạn không phải là người sở hữu hồ sơ này không thể sửa",
+      400
+    );
+  }
   const { role } = data;
   const profileShare = await ProfileShare.findByPk(shareId);
   if (!profileShare) {
@@ -101,6 +119,16 @@ const updateProfileShare = async (userId, profileId, shareId, data) => {
 };
 const deleteProfileShare = async (userId, profileId, shareId) => {
   await checkAccess(userId, profileId);
+  const profile = await PatientProfile.findByPk(profileId);
+  if (!profile) {
+    throw httpError("Hồ sơ bệnh nhân không tồn tại", 404);
+  }
+  if (profile.owner_user_id != userId) {
+    throw httpError(
+      "Bạn không phải là người sở hữu hồ sơ này không thể xoá",
+      400
+    );
+  }
   const profileShare = await ProfileShare.findByPk(shareId);
   if (!profileShare) {
     throw httpError("Chia sẻ hồ sơ không tồn tại", 404);
