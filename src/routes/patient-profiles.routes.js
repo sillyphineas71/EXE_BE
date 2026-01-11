@@ -1,6 +1,7 @@
 const express = require("express");
 const isAuth = require("../middlewares/isAuth");
 const patientProfileController = require("../controllers/patient-profiles.controller");
+const ProfileShareController = require("../controllers/profile-share.controller");
 const MedicationRegimensController = require("../controllers/medication-regimens.controller");
 const SymptomEntryController = require("../controllers/symptom-entry.controller");
 
@@ -16,6 +17,32 @@ router.get("/:profileId", isAuth, patientProfileController.getProfileDetail);
 router.patch("/:profileId", isAuth, patientProfileController.updateProfile);
 //DELETE /api/v1/patient-profiles/{profileId}
 router.delete("/:profileId", isAuth, patientProfileController.deleteProfile);
+//------------------------------
+//2.2 PROFILE SHARING
+//POST /api/v1/patient-profiles/{profileId}/shares
+router.post(
+  "/:profileId/shares",
+  isAuth,
+  ProfileShareController.createProfileShare
+);
+//GET /api/v1/patient-profiles/{profileId}/shares
+router.get(
+  "/:profileId/shares",
+  isAuth,
+  ProfileShareController.getUserOfProfileShare
+);
+//PATCH /api/v1/patient-profiles/{profileId}/shares/{shareId}
+router.patch(
+  "/:profileId/shares/:shareId",
+  isAuth,
+  ProfileShareController.updateProfileShare
+);
+//DELETE /api/v1/patient-profiles/{profileId}/shares/{shareId}
+router.delete(
+  "/:profileId/shares/:shareId",
+  isAuth,
+  ProfileShareController.deleteProfileShare
+);
 //------------------------------
 //5. MEDICATION
 // POST /api/v1/patient-profiles/{profileId}/regimens
