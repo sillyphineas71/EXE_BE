@@ -195,7 +195,7 @@ const getSymptomsByProfile = async (
       notes: plain.notes,
       linked_regimens: (plain.regimens || []).map((link) => ({
         regimen_id: link.id,
-        display_name: link.regimen?.display_name || "Thuốc không xác định",
+        display_name: link.display_name || "Thuốc không xác định",
         drug_product_id: link.drug_product_id,
         link_note: link.SymptomMedicationLink.note,
       })),
