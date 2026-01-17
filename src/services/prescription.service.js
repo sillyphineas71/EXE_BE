@@ -347,7 +347,7 @@ const updatePrescription = async (userId, prescriptionId, data) => {
   ) {
     throw httpError(
       "Trạng thái không hợp lệ. Chỉ chấp nhận: active, completed, cancelled",
-      400
+      400,
     );
   }
 
@@ -376,6 +376,114 @@ const updatePrescription = async (userId, prescriptionId, data) => {
   };
 };
 
+const listPrescriptionsByProfile = async (
+  userId,
+  profileId,
+  status,
+  limit = 10,
+  offset = 0,
+) => {
+  // Verify profile exists and user has access
+  const profile = await PatientProfile.findByPk(profileId);
+  if (!profile) {
+    throw httpError("Không tìm thấy hồ sơ bệnh nhân", 404);
+  }
+
+  if (profile.owner_user_id !== userId) {
+    throw httpError("Bạn không có quyền truy cập hồ sơ này", 403);
+  }
+
+  // Build where clause for filtering
+  const where = { profile_id: profileId };
+  if (status) {
+    if (!["active", "completed", "cancelled"].includes(status)) {
+      throw httpError(
+        "Trạng thái không hợp lệ. Chỉ chấp nhận: active, completed, cancelled",
+        400,
+      );
+    }
+    where.status = status;
+  }
+
+  // Parse pagination parameters
+  const parsedLimit = parseInt(limit) || 10;
+  const parsedOffset = parseInt(offset) || 0;
+
+  if (parsedLimit < 1 || parsedLimit > 100) {
+    throw httpError("Limit phải từ 1 đến 100", 400);
+  }
+
+  if (parsedOffset < 0) {
+    throw httpError("Offset phải lớn hơn hoặc bằng 0", 400);
+  }
+
+  // Fetch prescriptions with pagination
+  const { count, rows } = await Prescription.findAndCountAll({
+    where,
+    include: [
+      {
+        model: PrescriptionItem,
+        as: "items",
+        attributes: [
+          "id",
+          "original_name_text",
+          "original_instructions",
+          "drug_product_id",
+          "substance_id",
+          "dose_amount",
+          "dose_unit",
+          "frequency_text",
+          "route",
+          "duration_days",
+          "start_date",
+          "end_date",
+          "is_prn",
+          "notes",
+        ],
+      },
+      {
+        model: PrescriptionFile,
+        as: "files",
+        attributes: ["id", "file_url", "file_type", "created_at"],
+      },
+    ],
+    order: [["created_at", "DESC"]],
+    limit: parsedLimit,
+    offset: parsedOffset,
+  });
+
+  // Format results
+  const prescriptions = rows.map((prescription) => {
+    const plain = prescription.get({ plain: true });
+    return {
+      id: plain.id,
+      profile_id: plain.profile_id,
+      prescriber_name: plain.prescriber_name,
+      prescriber_specialty: plain.prescriber_specialty,
+      facility_name: plain.facility_name,
+      issued_date: plain.issued_date,
+      note: plain.note,
+      source_type: plain.source_type,
+      status: plain.status,
+      created_by_user_id: plain.created_by_user_id,
+      created_at: plain.created_at,
+      updated_at: plain.updated_at,
+      items: plain.items || [],
+      files: plain.files || [],
+    };
+  });
+
+  return {
+    data: prescriptions,
+    pagination: {
+      total: count,
+      limit: parsedLimit,
+      offset: parsedOffset,
+      totalPages: Math.ceil(count / parsedLimit),
+    },
+  };
+};
+
 module.exports = {
   createPrescription,
   addPrescriptionItem,
@@ -383,4 +491,5 @@ module.exports = {
   updatePrescriptionItem,
   deletePrescriptionItem,
   updatePrescription,
+  listPrescriptionsByProfile,
 };

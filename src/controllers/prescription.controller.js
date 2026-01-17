@@ -6,7 +6,7 @@ const createPrescription = async (req, res, next) => {
     const prescription = await prescriptionService.createPrescription(
       req.user.id,
       profileId,
-      req.body
+      req.body,
     );
     return res.status(201).json(prescription);
   } catch (error) {
@@ -20,7 +20,7 @@ const addPrescriptionItem = async (req, res, next) => {
     const item = await prescriptionService.addPrescriptionItem(
       req.user.id,
       prescriptionId,
-      req.body
+      req.body,
     );
     return res.status(201).json(item);
   } catch (error) {
@@ -33,7 +33,7 @@ const getPrescriptionById = async (req, res, next) => {
     const { prescriptionId } = req.params;
     const result = await prescriptionService.getPrescriptionById(
       req.user.id,
-      prescriptionId
+      prescriptionId,
     );
     return res.json(result);
   } catch (error) {
@@ -48,7 +48,7 @@ const updatePrescriptionItem = async (req, res, next) => {
       req.user.id,
       prescriptionId,
       itemId,
-      req.body
+      req.body,
     );
     return res.json(item);
   } catch (error) {
@@ -62,7 +62,7 @@ const deletePrescriptionItem = async (req, res, next) => {
     await prescriptionService.deletePrescriptionItem(
       req.user.id,
       prescriptionId,
-      itemId
+      itemId,
     );
     return res.status(204).send();
   } catch (error) {
@@ -76,9 +76,26 @@ const updatePrescription = async (req, res, next) => {
     const prescription = await prescriptionService.updatePrescription(
       req.user.id,
       prescriptionId,
-      req.body
+      req.body,
     );
     return res.json(prescription);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const listPrescriptionsByProfile = async (req, res, next) => {
+  try {
+    const { profileId } = req.params;
+    const { status, limit = 10, offset = 0 } = req.query;
+    const result = await prescriptionService.listPrescriptionsByProfile(
+      req.user.id,
+      profileId,
+      status,
+      limit,
+      offset,
+    );
+    return res.json(result);
   } catch (error) {
     return next(error);
   }
@@ -91,4 +108,5 @@ module.exports = {
   updatePrescriptionItem,
   deletePrescriptionItem,
   updatePrescription,
+  listPrescriptionsByProfile,
 };

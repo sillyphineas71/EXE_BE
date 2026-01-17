@@ -4,40 +4,46 @@ const prescriptionController = require("../controllers/prescription.controller")
 
 const router = express.Router();
 
+router.get(
+  "/patient-profiles/:profileId/prescriptions",
+  isAuth,
+  prescriptionController.listPrescriptionsByProfile,
+);
+
 router.post(
   "/patient-profiles/:profileId/prescriptions",
   isAuth,
-  prescriptionController.createPrescription
+  prescriptionController.createPrescription,
 );
 
 router.get(
   "/prescriptions/:prescriptionId",
   isAuth,
-  prescriptionController.getPrescriptionById
+  prescriptionController.getPrescriptionById,
 );
 
 router.patch(
   "/prescriptions/:prescriptionId",
   isAuth,
-  prescriptionController.updatePrescription
+  prescriptionController.updatePrescription,
 );
 
 router.post(
   "/prescriptions/:prescriptionId/items",
   isAuth,
-  prescriptionController.addPrescriptionItem
+  prescriptionController.addPrescriptionItem,
 );
 
 router.patch(
   "/prescriptions/:prescriptionId/items/:itemId",
   isAuth,
-  prescriptionController.updatePrescriptionItem
+  prescriptionController.updatePrescriptionItem,
 );
 
 router.delete(
   "/prescriptions/:prescriptionId/items/:itemId",
   isAuth,
-  prescriptionController.deletePrescriptionItem
+  prescriptionController.deletePrescriptionItem,
 );
 
 module.exports = router;
