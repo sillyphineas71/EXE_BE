@@ -2,6 +2,7 @@ const { Op } = require("sequelize");
 const {
   sequelize,
   MedicationIntakeEvent,
+  MedicationRegimen,
   PatientProfile,
   ProfileShare,
 } = require("../models");
@@ -173,6 +174,8 @@ const parseDate = (value, fieldName) => {
 };
 
 const listIntakeEventsInRange = async (userId, profileId, query) => {
+  console.log(userId, profileId, query);
+
   const { role } = await getProfileAccess(userId, profileId);
   if (!["owner", "caregiver", "viewer"].includes(role))
     throw httpError("Không có quyền", 403);
@@ -180,7 +183,7 @@ const listIntakeEventsInRange = async (userId, profileId, query) => {
   const from = parseDate(query.from || query.from_datetime, "from_datetime");
   const to = parseDate(query.to || query.to_datetime, "to_datetime");
   if (from.getTime() > to.getTime())
-    throw httpError("from_datetime phải <= to_datetime", 400);
+    throw httpError("from_datetimeƯ phải <= to_datetime", 400);
 
   const where = {
     profile_id: profileId,
@@ -192,6 +195,13 @@ const listIntakeEventsInRange = async (userId, profileId, query) => {
 
   const events = await MedicationIntakeEvent.findAll({
     where,
+    include: [
+      {
+        model: MedicationRegimen,
+        as: "regimen",
+        attributes: ["display_name", "total_daily_dose", "dose_unit"],
+      },
+    ],
     order: [
       ["scheduled_time", "ASC"],
       ["created_at", "ASC"],
