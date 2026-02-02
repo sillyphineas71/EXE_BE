@@ -5,6 +5,7 @@ const {
   PatientProfile,
   ProfileShare,
 } = require("../models");
+const { DateTime } = require("luxon");
 
 const httpError = (message, statusCode, details) => {
   const error = new Error(message);
@@ -12,6 +13,138 @@ const httpError = (message, statusCode, details) => {
   if (details) error.details = details;
   return error;
 };
+
+/**
+ * Tự động tạo MedicationIntakeEvent cho một regimen
+ * @param {Object} regimen - MedicationRegimen object với đầy đủ thông tin
+ * @param {Object} transaction - Optional Sequelize transaction
+ * @returns {Promise<Array>} - Array of created MedicationIntakeEvent records
+ */
+const generateIntakeEventsForRegimen = async (regimen, transaction = null) => {
+  try {
+    // Validate input
+    if (!regimen || !regimen.id || !regimen.profile_id) {
+      throw new Error("Invalid regimen object");
+    }
+
+    const {
+      id: regimenId,
+      profile_id: profileId,
+      start_date,
+      end_date,
+      schedule_payload,
+      timezone,
+    } = regimen;
+
+    // Validate schedule_payload.times
+    if (!schedule_payload || !Array.isArray(schedule_payload.times)) {
+      console.warn(
+        `[generateIntakeEvents] Regimen ${regimenId} không có schedule_payload.times, bỏ qua`
+      );
+      return [];
+    }
+
+    const times = schedule_payload.times;
+    if (times.length === 0) {
+      console.warn(
+        `[generateIntakeEvents] Regimen ${regimenId} có times array rỗng, bỏ qua`
+      );
+      return [];
+    }
+
+    const tz = timezone || "Asia/Ho_Chi_Minh";
+
+    // Parse start_date và end_date
+    const startDT = DateTime.fromJSDate(new Date(start_date), { zone: tz });
+    const endDT = DateTime.fromJSDate(new Date(end_date), { zone: tz });
+
+    if (!startDT.isValid || !endDT.isValid) {
+      throw new Error("Invalid start_date or end_date");
+    }
+
+    // Tạo array để bulk insert
+    const eventsToCreate = [];
+
+    // Loop qua từng ngày từ start_date đến end_date
+    let currentDay = startDT.startOf("day");
+    const endDay = endDT.startOf("day");
+
+    while (currentDay <= endDay) {
+      // Với mỗi ngày, tạo events cho từng time trong times array
+      for (const timeStr of times) {
+        try {
+          // Parse time string (format: "HH:mm")
+          const [hour, minute] = timeStr.split(":").map(Number);
+
+          if (
+            isNaN(hour) ||
+            isNaN(minute) ||
+            hour < 0 ||
+            hour > 23 ||
+            minute < 0 ||
+            minute > 59
+          ) {
+            console.warn(
+              `[generateIntakeEvents] Invalid time format: ${timeStr}, skipping`
+            );
+            continue;
+          }
+
+          // Tạo scheduled_time = ngày hiện tại + giờ từ times
+          const scheduledTime = currentDay.set({ hour, minute, second: 0, millisecond: 0 });
+
+          eventsToCreate.push({
+            regimen_id: regimenId,
+            profile_id: profileId,
+            scheduled_time: scheduledTime.toJSDate(),
+            status: "unknown",
+            taken_time: null,
+            dose_amount_taken: null,
+            notes: null,
+            recorded_by_user_id: null,
+          });
+        } catch (err) {
+          console.error(
+            `[generateIntakeEvents] Error parsing time ${timeStr}:`,
+            err
+          );
+        }
+      }
+
+      // Chuyển sang ngày tiếp theo
+      currentDay = currentDay.plus({ days: 1 });
+    }
+
+    // Bulk insert vào database
+    if (eventsToCreate.length === 0) {
+      console.warn(
+        `[generateIntakeEvents] No events to create for regimen ${regimenId}`
+      );
+      return [];
+    }
+
+    const createdEvents = await MedicationIntakeEvent.bulkCreate(
+      eventsToCreate,
+      {
+        returning: true,
+        transaction,
+      }
+    );
+
+    console.log(
+      `[generateIntakeEvents] ✅ Created ${createdEvents.length} intake events for regimen ${regimenId}`
+    );
+
+    return createdEvents;
+  } catch (error) {
+    console.error(
+      `[generateIntakeEvents] ❌ Error generating events for regimen ${regimen?.id}:`,
+      error
+    );
+    throw error;
+  }
+};
+
 
 const getProfileAccess = async (userId, profileId) => {
   const profile = await PatientProfile.findByPk(profileId, {
@@ -166,4 +299,5 @@ module.exports = {
   listIntakeEventsInRange,
   updateIntakeEventCheckin,
   listIntakeEventsForSummary,
+  generateIntakeEventsForRegimen,
 };

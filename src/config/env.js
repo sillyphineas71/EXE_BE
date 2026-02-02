@@ -28,6 +28,13 @@ const config = {
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1h",
     bcryptSaltRounds: getNumber(process.env.BCRYPT_SALT_ROUNDS, 10),
   },
+  email: {
+    service: process.env.EMAIL_SERVICE || "gmail",
+    user: process.env.EMAIL_USER || "",
+    password: process.env.EMAIL_PASSWORD || "",
+    fromName: process.env.EMAIL_FROM_NAME || "CareDose",
+    fromAddress: process.env.EMAIL_FROM_ADDRESS || process.env.EMAIL_USER || "",
+  },
 };
 
 module.exports = config;

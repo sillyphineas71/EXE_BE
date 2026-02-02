@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const { User, PatientProfile, ProfileShare, Role } = require("../models/index");
+const { sendProfileShareNotification } = require("./email.service");
 
 const httpError = (message, statusCode) => {
   const error = new Error(message);
@@ -61,6 +62,23 @@ const createProfileShare = async (userId, profileId, data) => {
     user_id: user.id,
     role: role,
   });
+
+  // Send email notification (async, don't wait for result)
+  // If email fails, log error but don't fail the share operation
+  const sharerUser = await User.findByPk(userId);
+  sendProfileShareNotification({
+    recipientEmail: user.email,
+    recipientName: user.full_name,
+    sharerName: sharerUser ? sharerUser.full_name : "Người dùng",
+    profileName: profile.full_name,
+    role: role,
+  }).catch((error) => {
+    console.error(
+      `⚠️  Failed to send email notification for profile share ${newProfileShare.id}:`,
+      error.message
+    );
+  });
+
   return newProfileShare;
 };
 const getUserOfProfileShare = async (userId, profileId) => {
