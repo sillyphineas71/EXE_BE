@@ -1,10 +1,25 @@
-const { LegalDocument, UserLegalAcceptance } = require("../models/index");
+const {
+  LegalDocument,
+  UserLegalAcceptance,
+  RefSource,
+} = require("../models/index");
 const { Op } = require("sequelize");
 
 const httpError = (message, statusCode) => {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+};
+const createRefSources = async (data) => {
+  const { name, url, description, license_info } = data;
+  const newRefSrc = await RefSource.create({
+    name,
+    url,
+    description,
+    license_info,
+    created_at: new Date(),
+  });
+  return newRefSrc;
 };
 
 const getLegalDocuments = async ({ doc_type, latest = true }) => {
@@ -80,4 +95,5 @@ module.exports = {
   getLegalDocuments,
   acceptLegalDocument,
   getUserAcceptances,
+  createRefSources,
 };

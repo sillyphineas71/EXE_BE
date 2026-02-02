@@ -22,7 +22,7 @@ const acceptDocument = async (req, res, next) => {
     const { legal_document_id } = req.body;
     const result = await legalService.acceptLegalDocument(
       userId,
-      legal_document_id
+      legal_document_id,
     );
 
     res.status(201).json(result);
@@ -41,9 +41,20 @@ const getHistory = async (req, res, next) => {
     next(error);
   }
 };
+const createRefSources = async (req, res, next) => {
+  try {
+    const data = req.body;
+    const result = await legalService.createRefSources(data);
+
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
 
 module.exports = {
   getDocuments,
   acceptDocument,
   getHistory,
+  createRefSources,
 };

@@ -47,8 +47,7 @@ const initCronJobs = () => {
       runDailyJob();
     },
     {
-      timezone: CRON_TIMEZONE,
-      scheduled: true,
+      timezone: "Asia/Ho_Chi_Minh",
     },
   );
 
