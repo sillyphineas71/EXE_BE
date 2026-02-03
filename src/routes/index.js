@@ -10,6 +10,7 @@ const legalDocumentRoutes = require("./legal.routes");
 const legalAcceptanceRoutes = require("./legal-acceptance.routes");
 const pushDeviceRoutes = require("./push-device.routes");
 const intakeRoutes = require("./intake.routes");
+const notificationRoutes = require("./notification.routes");
 
 const router = express.Router();
 
@@ -25,4 +26,6 @@ router.use("/symptoms", symptomRoutes);
 router.use("/legal-documents", legalDocumentRoutes);
 router.use("/legal-acceptances", legalAcceptanceRoutes);
 router.use("/push-devices", pushDeviceRoutes);
+router.use("/notifications", notificationRoutes);
+
 module.exports = router;
