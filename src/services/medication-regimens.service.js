@@ -11,7 +11,6 @@ const {
 const { DateTime } = require("luxon");
 const { generateIntakeEventsForRegimen } = require("./intake.service");
 
-
 const httpError = (message, statusCode) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -36,12 +35,11 @@ const checkAccess = async (userId, profileId) => {
   if (!profile) {
     throw httpError(
       "Hồ sơ không tồn tại hoặc bạn không có quyền truy cập",
-      403
+      403,
     );
   }
   return profile;
 };
-
 
 const createRegimes = async (userId, profileId, data) => {
   const {
@@ -121,7 +119,7 @@ const createRegimes = async (userId, profileId, data) => {
         timezone: tz,
         created_by_user_id: userId,
       },
-      { transaction }
+      { transaction },
     );
 
     // ✅ Tự động tạo MedicationIntakeEvent
@@ -249,10 +247,76 @@ const stopRegimen = async (userId, regimenId) => {
 
   return true;
 };
+
+function getTodayDateOnly(timeZone = "Asia/Ho_Chi_Minh") {
+  // en-CA => format YYYY-MM-DD
+  return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
+}
+
+const getRegimensByProfileInUse = async (userId, profileId, query = {}) => {
+  await checkAccess(userId, profileId);
+
+  const tz =
+    String(query.timezone || "Asia/Ho_Chi_Minh").trim() || "Asia/Ho_Chi_Minh";
+  const probe = DateTime.now().setZone(tz);
+  if (!probe.isValid) {
+    throw httpError("timezone không hợp lệ", 400);
+  }
+
+  // today theo timezone, dạng YYYY-MM-DD (match DATEONLY)
+  const today = probe.toISODate();
+
+  const whereClause = {
+    profile_id: profileId,
+    is_active: true,
+    [Op.and]: [
+      { [Op.or]: [{ start_date: null }, { start_date: { [Op.lte]: today } }] },
+      { [Op.or]: [{ end_date: null }, { end_date: { [Op.gte]: today } }] },
+    ],
+  };
+
+  const regimens = await MedicationRegimen.findAll({
+    where: whereClause,
+    attributes: [
+      "id",
+      "drug_product_id", // ✅ thêm field này
+      "display_name",
+      "total_daily_dose",
+      "dose_unit",
+      "start_date",
+      "end_date",
+      "schedule_type",
+      "is_active",
+      "schedule_payload",
+      "timezone",
+    ],
+    include: [
+      {
+        model: DrugProduct,
+        as: "drugProduct", // ✅ alias đúng theo models/index.js
+        required: false,
+        attributes: [
+          "id",
+          "brand_name",
+          "form",
+          "route",
+          "strength_text",
+          "manufacturer",
+          "country",
+          "is_generic",
+        ],
+      },
+    ],
+    order: [["created_at", "DESC"]],
+  });
+
+  return regimens;
+};
 module.exports = {
   createRegimes,
   getRegimensByProfile,
   getRegimenDetail,
   updateRegimen,
   stopRegimen,
+  getRegimensByProfileInUse,
 };

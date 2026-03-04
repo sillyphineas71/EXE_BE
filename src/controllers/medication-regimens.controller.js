@@ -9,7 +9,7 @@ const createRegimes = async (req, res, next) => {
     const result = await MedicationRegimensService.createRegimes(
       userId,
       profileId,
-      data
+      data,
     );
     await schedulerService.scheduleRemindersForRegimen(result);
     return res.json(result);
@@ -27,7 +27,7 @@ const getRegimensByProfile = async (req, res, next) => {
     const result = await MedicationRegimensService.getRegimensByProfile(
       userId,
       profileId,
-      is_active
+      is_active,
     );
     return res.json(result);
   } catch (error) {
@@ -41,7 +41,7 @@ const getRegimenDetail = async (req, res, next) => {
 
     const result = await MedicationRegimensService.getRegimenDetail(
       userId,
-      regimenId
+      regimenId,
     );
     return res.json(result);
   } catch (error) {
@@ -56,7 +56,7 @@ const updateRegimen = async (req, res, next) => {
     const result = await MedicationRegimensService.updateRegimen(
       userId,
       regimenId,
-      data
+      data,
     );
     if (result && result.is_active) {
       await schedulerService.scheduleRemindersForRegimen(result);
@@ -72,9 +72,24 @@ const stopRegimen = async (req, res, next) => {
     const regimenId = req.params.regimenId;
     const result = await MedicationRegimensService.stopRegimen(
       userId,
-      regimenId
+      regimenId,
     );
     return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+};
+const getRegimensByProfileInUse = async (req, res, next) => {
+  try {
+    const profileId = req.params.profileId;
+    const userId = req.user.id;
+
+    const result = await MedicationRegimensService.getRegimensByProfileInUse(
+      userId,
+      profileId,
+    );
+
+    return res.json(result);
   } catch (error) {
     return next(error);
   }
@@ -85,4 +100,5 @@ module.exports = {
   getRegimenDetail,
   updateRegimen,
   stopRegimen,
+  getRegimensByProfileInUse,
 };

@@ -5,6 +5,7 @@ const {
   MedicationRegimen,
   PatientProfile,
   ProfileShare,
+  DrugProduct,
 } = require("../models");
 const { DateTime } = require("luxon");
 
@@ -40,7 +41,7 @@ const generateIntakeEventsForRegimen = async (regimen, transaction = null) => {
     // Validate schedule_payload.times
     if (!schedule_payload || !Array.isArray(schedule_payload.times)) {
       console.warn(
-        `[generateIntakeEvents] Regimen ${regimenId} không có schedule_payload.times, bỏ qua`
+        `[generateIntakeEvents] Regimen ${regimenId} không có schedule_payload.times, bỏ qua`,
       );
       return [];
     }
@@ -48,7 +49,7 @@ const generateIntakeEventsForRegimen = async (regimen, transaction = null) => {
     const times = schedule_payload.times;
     if (times.length === 0) {
       console.warn(
-        `[generateIntakeEvents] Regimen ${regimenId} có times array rỗng, bỏ qua`
+        `[generateIntakeEvents] Regimen ${regimenId} có times array rỗng, bỏ qua`,
       );
       return [];
     }
@@ -86,13 +87,18 @@ const generateIntakeEventsForRegimen = async (regimen, transaction = null) => {
             minute > 59
           ) {
             console.warn(
-              `[generateIntakeEvents] Invalid time format: ${timeStr}, skipping`
+              `[generateIntakeEvents] Invalid time format: ${timeStr}, skipping`,
             );
             continue;
           }
 
           // Tạo scheduled_time = ngày hiện tại + giờ từ times
-          const scheduledTime = currentDay.set({ hour, minute, second: 0, millisecond: 0 });
+          const scheduledTime = currentDay.set({
+            hour,
+            minute,
+            second: 0,
+            millisecond: 0,
+          });
 
           eventsToCreate.push({
             regimen_id: regimenId,
@@ -107,7 +113,7 @@ const generateIntakeEventsForRegimen = async (regimen, transaction = null) => {
         } catch (err) {
           console.error(
             `[generateIntakeEvents] Error parsing time ${timeStr}:`,
-            err
+            err,
           );
         }
       }
@@ -119,7 +125,7 @@ const generateIntakeEventsForRegimen = async (regimen, transaction = null) => {
     // Bulk insert vào database
     if (eventsToCreate.length === 0) {
       console.warn(
-        `[generateIntakeEvents] No events to create for regimen ${regimenId}`
+        `[generateIntakeEvents] No events to create for regimen ${regimenId}`,
       );
       return [];
     }
@@ -129,23 +135,22 @@ const generateIntakeEventsForRegimen = async (regimen, transaction = null) => {
       {
         returning: true,
         transaction,
-      }
+      },
     );
 
     console.log(
-      `[generateIntakeEvents] ✅ Created ${createdEvents.length} intake events for regimen ${regimenId}`
+      `[generateIntakeEvents] ✅ Created ${createdEvents.length} intake events for regimen ${regimenId}`,
     );
 
     return createdEvents;
   } catch (error) {
     console.error(
       `[generateIntakeEvents] ❌ Error generating events for regimen ${regimen?.id}:`,
-      error
+      error,
     );
     throw error;
   }
 };
-
 
 const getProfileAccess = async (userId, profileId) => {
   const profile = await PatientProfile.findByPk(profileId, {
@@ -171,6 +176,97 @@ const parseDate = (value, fieldName) => {
   if (!value || Number.isNaN(d.getTime()))
     throw httpError(`${fieldName} không hợp lệ`, 400);
   return d;
+};
+const normalizeTimezone = (value) => {
+  const tz = String(value || "").trim() || "Asia/Ho_Chi_Minh";
+  const probe = DateTime.now().setZone(tz);
+  if (!probe.isValid) {
+    throw httpError("timezone không hợp lệ", 400, { timezone: value });
+  }
+  return tz;
+};
+
+const computeDayRange = (tz, dateStr) => {
+  if (dateStr != null && String(dateStr).trim() !== "") {
+    const base = DateTime.fromISO(String(dateStr), { zone: tz }).startOf("day");
+    if (!base.isValid) throw httpError("date không hợp lệ (YYYY-MM-DD)", 400);
+    return { from: base, to: base.plus({ days: 1 }) };
+  }
+
+  const now = DateTime.now().setZone(tz);
+  const from = now.startOf("day");
+  return { from, to: from.plus({ days: 1 }) };
+};
+
+/**
+ * Lấy các lần uống thuốc (intake events) trong ngày "hôm nay" theo timezone.
+ * - Default timezone: Asia/Ho_Chi_Minh
+ * - Có thể truyền query.date=YYYY-MM-DD để lấy 1 ngày cụ thể.
+ * - Có thể truyền query.include_inactive=true để không lọc regimen.is_active
+ * - Có thể truyền query.status / query.regimen_id để filter
+ */
+const listTodayIntakeEvents = async (userId, profileId, query = {}) => {
+  const { role } = await getProfileAccess(userId, profileId);
+  if (!["owner", "caregiver", "viewer"].includes(role)) {
+    throw httpError("Không có quyền", 403);
+  }
+
+  const tz = normalizeTimezone(query.timezone || query.tz);
+  const { from, to } = computeDayRange(tz, query.date);
+
+  const where = {
+    profile_id: profileId,
+    scheduled_time: {
+      [Op.gte]: from.toJSDate(),
+      [Op.lt]: to.toJSDate(), // ✅ [startOfDay, nextDay) tránh bug ms
+    },
+  };
+
+  if (query.status) where.status = query.status;
+  if (query.regimen_id) where.regimen_id = query.regimen_id;
+
+  const includeInactive =
+    String(query.include_inactive || "false").toLowerCase() === "true" ||
+    String(query.include_inactive || "0") === "1";
+
+  const regimenInclude = {
+    model: MedicationRegimen,
+    as: "regimen",
+    attributes: [
+      "id",
+      "display_name",
+      "total_daily_dose",
+      "dose_unit",
+      "drug_product_id",
+      "is_active",
+      "timezone",
+    ],
+    required: true,
+    include: [
+      {
+        model: DrugProduct,
+        as: "drugProduct",
+        attributes: ["id", "brand_name", "form", "route", "strength_text"],
+        required: false,
+      },
+    ],
+  };
+
+  // ✅ mặc định: chỉ lấy regimen đang active (đúng “cần uống hôm nay”)
+  if (!includeInactive) {
+    regimenInclude.where = { is_active: true };
+  }
+
+  const events = await MedicationIntakeEvent.findAll({
+    where,
+    include: [regimenInclude],
+    order: [
+      ["scheduled_time", "ASC"],
+      ["created_at", "ASC"],
+    ],
+  });
+
+  return events.map((e) => e.get({ plain: true }));
 };
 
 const listIntakeEventsInRange = async (userId, profileId, query) => {
@@ -306,6 +402,7 @@ const listIntakeEventsForSummary = async (userId, profileId, query) => {
 };
 
 module.exports = {
+  listTodayIntakeEvents,
   listIntakeEventsInRange,
   updateIntakeEventCheckin,
   listIntakeEventsForSummary,

@@ -8,7 +8,7 @@ const router = express.Router();
 router.get(
   "/:regimenId",
   isAuth,
-  MedicationRegimensController.getRegimenDetail
+  MedicationRegimensController.getRegimenDetail,
 );
 
 //PATCH /api/v1/regimens/{regimenId}
@@ -18,7 +18,7 @@ router.patch("/:regimenId", isAuth, MedicationRegimensController.updateRegimen);
 router.patch(
   "/:regimenId/stop",
   isAuth,
-  MedicationRegimensController.stopRegimen
+  MedicationRegimensController.stopRegimen,
 );
 
 module.exports = router;

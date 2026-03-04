@@ -23,25 +23,25 @@ router.delete("/:profileId", isAuth, patientProfileController.deleteProfile);
 router.post(
   "/:profileId/shares",
   isAuth,
-  ProfileShareController.createProfileShare
+  ProfileShareController.createProfileShare,
 );
 //GET /api/v1/patient-profiles/{profileId}/shares
 router.get(
   "/:profileId/shares",
   isAuth,
-  ProfileShareController.getUserOfProfileShare
+  ProfileShareController.getUserOfProfileShare,
 );
 //PATCH /api/v1/patient-profiles/{profileId}/shares/{shareId}
 router.patch(
   "/:profileId/shares/:shareId",
   isAuth,
-  ProfileShareController.updateProfileShare
+  ProfileShareController.updateProfileShare,
 );
 //DELETE /api/v1/patient-profiles/{profileId}/shares/{shareId}
 router.delete(
   "/:profileId/shares/:shareId",
   isAuth,
-  ProfileShareController.deleteProfileShare
+  ProfileShareController.deleteProfileShare,
 );
 //------------------------------
 //5. MEDICATION
@@ -49,19 +49,26 @@ router.delete(
 router.post(
   "/:profileId/regimens",
   isAuth,
-  MedicationRegimensController.createRegimes
+  MedicationRegimensController.createRegimes,
 );
 // GET /api/v1/patient-profiles/{profileId}/regimens
 router.get(
   "/:profileId/regimens",
   isAuth,
-  MedicationRegimensController.getRegimensByProfile
+  MedicationRegimensController.getRegimensByProfile,
 );
+// GET /api/v1/patient-profiles/{profileId}/regimens/in-use
+router.get(
+  "/:profileId/regimens/in-use",
+  isAuth,
+  MedicationRegimensController.getRegimensByProfileInUse,
+);
+
 // GET /api/v1/regimens/{regimenId}
 router.get(
   "/:profileId/regimens",
   isAuth,
-  MedicationRegimensController.getRegimensByProfile
+  MedicationRegimensController.getRegimensByProfile,
 );
 //-----------------------------------
 //7.SYMPTOMS
@@ -70,12 +77,12 @@ router.get(
 router.post(
   "/:profileId/symptoms",
   isAuth,
-  SymptomEntryController.createSymptomEntry
+  SymptomEntryController.createSymptomEntry,
 );
 //GET /api/v1/patient-profiles/{profileId}/symptoms
 router.get(
   "/:profileId/symptoms",
   isAuth,
-  SymptomEntryController.getSymptomsByProfile
+  SymptomEntryController.getSymptomsByProfile,
 );
 module.exports = router;
