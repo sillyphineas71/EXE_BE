@@ -1,0 +1,14 @@
+node_modules
+.git
+npm-debug.log
+coverage
+uploads
+logs
+*.zip
+*.tar
+*.gz
+*.mp4
+*.png
+*.jpg
+*.jpeg
+*.pdf

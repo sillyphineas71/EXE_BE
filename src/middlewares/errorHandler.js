@@ -1,20 +1,22 @@
 const errorHandler = (err, req, res, next) => {
-  if (!(err instanceof Error)) {
-    return res.status(500).json({ message: "Lỗi hệ thống" });
-  }
+  const status = err?.statusCode || err?.status || 500;
 
-  const status = err.statusCode || 500;
+  // ✅ Luôn log 1 dòng (debug production)
+  console.error("ERR", {
+    status,
+    method: req.method,
+    url: req.originalUrl,
+    name: err?.name,
+    message: err?.message || String(err),
+    details: err?.details,
+    stack: err?.stack,
+  });
+
   const payload = {
-    message: status >= 500 ? "Lỗi hệ thống" : err.message,
+    message: status >= 500 ? "Lỗi hệ thống" : (err?.message || "Bad Request"),
   };
 
-  if (err.details && status < 500) {
-    payload.details = err.details;
-  }
-
-  if (status >= 500) {
-    console.error(err);
-  }
+  if (err?.details && status < 500) payload.details = err.details;
 
   return res.status(status).json(payload);
 };

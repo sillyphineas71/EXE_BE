@@ -1,6 +1,8 @@
 const { User, Role, sequelize } = require("../models");
 const { hashPassword, comparePassword } = require("../utils/password");
 const { signAccessToken } = require("../utils/jwt");
+const PatientProfileController = require("./patient-profiles.service");
+
 
 const httpError = (message, statusCode) => {
   const error = new Error(message);
@@ -18,6 +20,7 @@ const login = async ({ email, password }) => {
     sequelize.fn("LOWER", sequelize.col("email")),
     normalizedEmail
   );
+  console.log(`email ${email}, password: ${password}`);
 
   const user = await User.findOne({
     where: emailCondition,
@@ -85,6 +88,17 @@ const register = async ({ email, password, full_name, phone_number }) => {
     role_id: defaultRole.id,
   });
 
+  const result = await PatientProfileController.createPatientProfile(
+    newUser.id,
+    {
+      full_name: newUser.full_name,
+      date_of_birth: "2000-01-01",
+      sex: "Male",
+      relationship_to_owner: "self",
+      notes: "",
+    },
+  );
+  
   const createdUser = await User.findByPk(newUser.id, {
     include: [{ model: Role, as: "role" }],
   });

@@ -40,6 +40,25 @@ module.exports = (sequelize) => {
           isIn: [["active", "disabled", "pending"]],
         },
       },
+      account_tier: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+        defaultValue: "free",
+        validate: {
+          isIn: [["free", "premium"]],
+        },
+      },
+      premium_plan_code: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        validate: {
+          isIn: [["monthly", "yearly"]],
+        },
+      },
+      premium_expires_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,

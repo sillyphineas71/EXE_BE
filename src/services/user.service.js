@@ -1,10 +1,25 @@
 const { User, Role } = require("../models");
+const { buildSubscriptionInfo } = require("./subscription.service");
 
 const httpError = (message, statusCode) => {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
 };
+
+const toCurrentUserResponse = (u) => ({
+  id: u.id,
+  email: u.email,
+  full_name: u.full_name,
+  phone_number: u.phone_number || null,
+  role: u.role ? u.role.code : null,
+  status: u.status,
+  account_tier: u.account_tier || "free",
+  premium_plan_code: u.premium_plan_code || null,
+  premium_expires_at: u.premium_expires_at || null,
+  subscription: buildSubscriptionInfo(u),
+  created_at: u.created_at,
+});
 
 const getCurrentUser = async (userId) => {
   const user = await User.findByPk(userId, {
@@ -13,16 +28,9 @@ const getCurrentUser = async (userId) => {
   if (!user) {
     throw httpError("Không tìm thấy người dùng", 404);
   }
+
   const u = user.get({ plain: true });
-  return {
-    id: u.id,
-    email: u.email,
-    full_name: u.full_name,
-    phone_number: u.phone_number || null,
-    role: u.role ? u.role.code : null,
-    status: u.status,
-    created_at: u.created_at,
-  };
+  return toCurrentUserResponse(u);
 };
 
 const updateCurrentUser = async (userId, { full_name, phone_number }) => {
@@ -54,15 +62,8 @@ const updateCurrentUser = async (userId, { full_name, phone_number }) => {
 
   await user.reload({ include: [{ model: Role, as: "role" }] });
   const u = user.get({ plain: true });
-  return {
-    id: u.id,
-    email: u.email,
-    full_name: u.full_name,
-    phone_number: u.phone_number || null,
-    role: u.role ? u.role.code : null,
-    status: u.status,
-    created_at: u.created_at,
-  };
+
+  return toCurrentUserResponse(u);
 };
 
 module.exports = {

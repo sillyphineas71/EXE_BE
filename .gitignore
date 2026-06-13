@@ -1,7 +1,8 @@
 # Dependencies
 node_modules/
-*.json
-
+src/config/serviceAccountKey.json
+google-services.json
+src/scripts/
 # Logs
 logs/
 *.log
