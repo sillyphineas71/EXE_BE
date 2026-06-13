@@ -1,353 +1,200 @@
--- BẬT EXTENSION UUID
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+# CareDose — Medication Management & Reminder API
 
---------------------------------------------------
--- 1. AUTH & RBAC (1 USER = 1 ROLE)
---------------------------------------------------
+Backend for **CareDose**, a mobile app that helps people manage medications for
+themselves and their family — tracking prescriptions, scheduling dose reminders,
+logging intake, and sending push notifications when it's time to take a medicine.
 
-CREATE TABLE roles (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code        TEXT UNIQUE NOT NULL, -- ADMIN / STAFF / USER ...
-    name        TEXT NOT NULL,
-    description TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+This repository contains the **REST API** and the **reminder engine**, deployed on
+AWS with a **serverless API + containerized worker** architecture.
 
-CREATE TABLE users (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email           TEXT UNIQUE NOT NULL,
-    password_hash   TEXT NOT NULL,
-    full_name       TEXT NOT NULL,
-    phone_number    TEXT,
-    role_id         UUID NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
-    status          TEXT NOT NULL DEFAULT 'active', -- active / disabled / pending
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_login_at   TIMESTAMPTZ,
-    CONSTRAINT users_status_chk 
-        CHECK (status IN ('active','disabled','pending'))
-);
+> 📱 Mobile client (React Native / Expo) lives in a separate repository.
 
-CREATE INDEX idx_users_role ON users(role_id);
+---
 
---------------------------------------------------
--- 2. HỒ SƠ BỆNH NHÂN & CHIA SẺ
---------------------------------------------------
+## Tech Stack
 
-CREATE TABLE patient_profiles (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    full_name               TEXT NOT NULL,
-    date_of_birth           DATE,
-    sex                     TEXT,  -- male/female/other/...
-    relationship_to_owner   TEXT,  -- self, father, mother, child, ...
-    notes                   TEXT,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+| Area | Technology |
+|------|------------|
+| Runtime / Framework | Node.js, Express 5 |
+| Database | PostgreSQL + Sequelize (ORM), UUID primary keys |
+| Queue & Scheduling | Bull (Redis-backed) + node-cron |
+| Auth | JWT + bcrypt, role-based access control (RBAC) |
+| Push Notifications | Firebase Admin (FCM) |
+| Email | Nodemailer |
+| PDF Export | Custom profile-PDF builder |
+| Serverless API | `serverless-http` on **AWS Lambda** |
+| Worker | Docker container on **AWS ECS** |
 
-CREATE TABLE profile_shares (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    profile_id      UUID NOT NULL REFERENCES patient_profiles(id) ON DELETE CASCADE,
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role            TEXT NOT NULL, -- owner / caregiver / viewer
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (profile_id, user_id),
-    CONSTRAINT profile_shares_role_chk 
-        CHECK (role IN ('owner','caregiver','viewer'))
-);
+---
 
---------------------------------------------------
--- 3. THUỐC & DỮ LIỆU THAM CHIẾU
---------------------------------------------------
+## Architecture
 
-CREATE TABLE ref_sources (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name            TEXT NOT NULL,
-    url             TEXT,
-    description     TEXT,
-    license_info    TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+```
+            Mobile App (Expo)
+                  │  HTTPS · JWT
+                  ▼
+          ┌─────────────────┐
+          │   AWS Lambda    │  serverless-http  ┌──────────────┐
+          │   (REST API)    │ ────────────────► │  PostgreSQL  │
+          └────────┬────────┘                   └──────────────┘
+                   │ enqueue
+                   ▼
+            ┌─────────────┐   Redis (Bull queue: "medication-reminders")
+            │    Redis    │ ◄──────────────────────────────────┐
+            └──────┬──────┘                                    │
+                   │ consume                                   │ enqueue
+                   ▼                                           │
+          ┌─────────────────┐   daily cron scans active   ┌────┴─────────┐
+          │   AWS ECS       │   medication regimens  ◄──── │  node-cron   │
+          │ (worker + cron) │ ──► Firebase Cloud Messaging └──────────────┘
+          └─────────────────┘        (push reminders)
+```
 
-CREATE TABLE substances (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name             TEXT NOT NULL,       -- tên hoạt chất, vd: Paracetamol
-    atc_code         TEXT,                -- mã ATC nếu có
+The system is split into **two deployment units**:
 
-    title            TEXT,                -- tiêu đề, vd: "Paracetamol – thuốc giảm đau, hạ sốt"
-    summary          TEXT,                -- mô tả ngắn
-    indications      TEXT,                -- chỉ định
-    warnings         TEXT,                -- cảnh báo
-    side_effects     TEXT,                -- tác dụng phụ thường gặp
-    usual_dose_text  TEXT,                -- liều dùng tham khảo
+1. **API — AWS Lambda.** The Express app is wrapped with `serverless-http`
+   (`lambda.js`). The handler caches the database connection across warm
+   invocations (`ensureDbConnected`) so the connection pool isn't re-opened on
+   every request, and normalizes request bodies that arrive as a `Buffer`/string
+   from the Lambda Function URL before they reach the JSON parser.
 
-    source_id        UUID REFERENCES ref_sources(id), -- lấy từ nguồn nào
-    last_reviewed_at TIMESTAMPTZ,        -- lần cuối nội dung được review
+2. **Reminder worker — AWS ECS.** A long-running container
+   (`worker.js` / `Dockerfile.worker`) runs the daily cron job and the Bull queue
+   processor. The cron scans active medication regimens (timezone-aware,
+   `Asia/Ho_Chi_Minh`) and schedules reminders; the worker consumes the queue and
+   delivers push notifications via FCM at each dose time.
 
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+This keeps the request/response API **serverless and cheap to run**, while the
+always-on scheduling work lives where long-running processes belong.
 
-CREATE UNIQUE INDEX substances_name_idx 
-    ON substances (LOWER(name));
+> **Cost note:** the reminder worker is the only always-on component. Depending on
+> scale and budget it can run on ECS, be consolidated onto a small EC2 instance, or
+> be refactored into an **EventBridge-scheduled Lambda** — the daily scan maps
+> cleanly to a once-a-day scheduled invocation.
 
-CREATE TABLE drug_products (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    brand_name      TEXT NOT NULL,       -- tên thương mại
-    form            TEXT,                -- viên nén, capsule, sirô...
-    route           TEXT,                -- oral, injection...
-    strength_text   TEXT,                -- "500 mg", "5 mg/ml"
-    manufacturer    TEXT,
-    country         TEXT,
-    is_generic      BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+---
 
-CREATE INDEX drug_products_brand_name_idx 
-    ON drug_products (LOWER(brand_name));
+## Features
 
-CREATE TABLE product_substances (
-    product_id      UUID NOT NULL REFERENCES drug_products(id) ON DELETE CASCADE,
-    substance_id    UUID NOT NULL REFERENCES substances(id) ON DELETE RESTRICT,
-    strength_value  NUMERIC(10,3),
-    strength_unit   TEXT,                -- mg, g, IU...
-    PRIMARY KEY (product_id, substance_id)
-);
+- 🔐 Authentication & RBAC (roles, JWT, bcrypt)
+- 👤 Patient profiles (self + family) with sharing roles (owner / caregiver / viewer)
+- 💊 Prescriptions, prescription items & uploaded prescription files
+- 🧪 Drug catalog, substances & drug-interaction / medication-safety checks
+- 📅 Medication regimens with scheduled dose reminders
+- ✅ Intake logging (taken / missed events)
+- 📝 Symptom journal with symptom–medication links
+- 🔔 Push-device registration, notifications & per-user notification preferences
+- 📄 Legal documents & user consent tracking
+- 🖨️ Patient-profile export to PDF & profile sharing
 
-CREATE TABLE drug_interactions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    substance_id_1  UUID NOT NULL REFERENCES substances(id) ON DELETE CASCADE,
-    substance_id_2  UUID NOT NULL REFERENCES substances(id) ON DELETE CASCADE,
-    severity        TEXT NOT NULL,    -- 'mild', 'moderate', 'severe' / 'contraindicated'
-    description     TEXT,             -- Mô tả rủi ro (VD: Nguy cơ chảy máu...)
-    management      TEXT,             -- Gợi ý xử lý tham khảo
-    source_id       UUID REFERENCES ref_sources(id), 
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+---
 
-    CONSTRAINT unique_interaction_pair UNIQUE (substance_id_1, substance_id_2) 
-);
+## Project Structure
 
---------------------------------------------------
--- 4. ĐƠN THUỐC, LỊCH DÙNG & UỐNG THUỐC
---------------------------------------------------
+```
+.
+├── lambda.js            # AWS Lambda handler (serverless-http)
+├── app.js               # Express app (serverless body normalization + DB warm-cache)
+├── server.js            # Local entry point
+├── worker.js            # ECS worker entry (cron + queue processor)
+├── Dockerfile.worker    # Container image for the ECS worker
+└── src/
+    ├── config/          # database, redis, firebase, env
+    ├── routes/          # /api/v1/* route definitions
+    ├── controllers/     # request handlers
+    ├── services/        # business logic
+    ├── models/          # Sequelize models (UUID PKs)
+    ├── middlewares/     # auth, error handling
+    ├── queues/          # Bull queue (medication-reminders)
+    ├── workers/         # queue job processors
+    ├── cron/            # daily regimen scan
+    └── utils/           # PDF builder, helpers
+```
 
-CREATE TABLE prescriptions (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    profile_id           UUID NOT NULL REFERENCES patient_profiles(id) ON DELETE CASCADE,
-    prescriber_name      TEXT,        -- tên bác sĩ
-    prescriber_specialty TEXT,
-    facility_name        TEXT,        -- tên cơ sở khám
-    issued_date          DATE,
-    note                 TEXT,
-    source_type          TEXT NOT NULL DEFAULT 'manual', -- manual / scan
-    status               TEXT NOT NULL DEFAULT 'active', -- active / completed / cancelled
-    created_by_user_id   UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT prescriptions_status_chk 
-        CHECK (status IN ('active','completed','cancelled')),
-    CONSTRAINT prescriptions_source_type_chk
-        CHECK (source_type IN ('manual','scan'))
-);
+---
 
-CREATE TABLE prescription_items (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    prescription_id         UUID NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
-    original_name_text      TEXT NOT NULL,  -- tên thuốc như trên toa
-    original_instructions   TEXT,           -- hướng dẫn gốc trên toa
-    drug_product_id         UUID REFERENCES drug_products(id),
-    substance_id            UUID REFERENCES substances(id),
-    dose_amount             NUMERIC(10,3),
-    dose_unit               TEXT,
-    frequency_text          TEXT,          -- "3 lần/ngày", "mỗi 8h"...
-    route                   TEXT,	
-    duration_days           INTEGER,
-    start_date              DATE,
-    end_date                DATE,
-    is_prn                  BOOLEAN NOT NULL DEFAULT FALSE,
-    notes                   TEXT
-);
+## Getting Started
 
-CREATE TABLE prescription_files (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    prescription_id UUID NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
-    file_url        TEXT NOT NULL,
-    file_type       TEXT NOT NULL,      -- image / pdf / other
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+### Prerequisites
+- Node.js 18+
+- PostgreSQL
+- Redis (required by the reminder queue / worker)
 
-CREATE TABLE medication_regimens (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    profile_id              UUID NOT NULL REFERENCES patient_profiles(id) ON DELETE CASCADE,
-    prescription_item_id    UUID REFERENCES prescription_items(id) ON DELETE SET NULL,
-    drug_product_id         UUID REFERENCES drug_products(id),
+### Install
+```bash
+npm install
+```
 
-    display_name            TEXT NOT NULL,         -- tên hiển thị cho user
-    total_daily_dose        NUMERIC(10,3),
-    dose_unit               TEXT,
-    start_date              DATE,
-    end_date                DATE,
-    is_active               BOOLEAN NOT NULL DEFAULT TRUE,
+### Environment
+Create a `.env` in the project root (never commit it — it's git-ignored):
 
-    schedule_type           TEXT NOT NULL DEFAULT 'fixed_times',  -- fixed_times / interval_hours / custom...
-    schedule_payload        JSONB NOT NULL DEFAULT '{}'::jsonb,   -- chi tiết giờ uống / pattern
-    timezone                TEXT NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+```dotenv
+PORT=3000
 
-    created_by_user_id      UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+# Database
+DB_HOST=your-postgres-host
+DB_PORT=5432
+DB_NAME=caredose
+DB_USER=postgres
+DB_PASSWORD=your-password
+DB_SSL=true
 
-    CONSTRAINT med_regimen_schedule_type_chk
-        CHECK (schedule_type IN ('fixed_times','interval_hours','custom'))
-);
+# Auth
+JWT_SECRET=your-jwt-secret
+JWT_EXPIRES_IN=1h
 
-CREATE TABLE medication_intake_events (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    regimen_id          UUID NOT NULL REFERENCES medication_regimens(id) ON DELETE CASCADE,
-    profile_id          UUID NOT NULL REFERENCES patient_profiles(id) ON DELETE CASCADE,
-    scheduled_time      TIMESTAMPTZ,
-    taken_time          TIMESTAMPTZ,
-    status              TEXT NOT NULL,    -- taken / skipped / delayed / unknown
-    dose_amount_taken   NUMERIC(10,3),
-    notes               TEXT,
-    recorded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT intake_status_chk 
-        CHECK (status IN ('taken','skipped','delayed','unknown'))
-);
+# Redis (Bull queue)
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=
 
---------------------------------------------------
--- 5. NHẬT KÝ TRIỆU CHỨNG & LIÊN KẾT THUỐC
---------------------------------------------------
+# Email (Nodemailer)
+EMAIL_USER=your@email.com
+EMAIL_PASSWORD=your-app-password
 
-CREATE TABLE symptom_entries (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    profile_id          UUID NOT NULL REFERENCES patient_profiles(id) ON DELETE CASCADE,
-    recorded_at         TIMESTAMPTZ NOT NULL,
-    symptom_name        TEXT NOT NULL,    -- "đau đầu", "buồn nôn", ...
-    severity_score      INTEGER,          -- 0–10
-    relation_to_med     TEXT,             -- before_medication / after_medication / unknown
-    description         TEXT,
-    notes               TEXT,
-    created_by_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT severity_score_chk 
-        CHECK (severity_score IS NULL OR (severity_score BETWEEN 0 AND 10)),
-    CONSTRAINT relation_to_med_chk
-        CHECK (relation_to_med IS NULL OR relation_to_med IN ('before_medication','after_medication','unknown'))
-);
+# Firebase Admin (service account)
+FB_PROJECT_ID=...
+FB_CLIENT_EMAIL=...
+FB_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# (plus the remaining FB_* fields from the service account)
+```
 
-CREATE TABLE symptom_medication_links (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    symptom_entry_id    UUID NOT NULL REFERENCES symptom_entries(id) ON DELETE CASCADE,
-    regimen_id          UUID NOT NULL REFERENCES medication_regimens(id) ON DELETE CASCADE,
-    note                TEXT,
-    UNIQUE (symptom_entry_id, regimen_id)
-);
+### Run locally
+```bash
+# API (development, with auto-reload)
+npm start            # nodemon server.js
 
---------------------------------------------------
--- 6. NHẮC UỐNG & NOTIFICATION
---------------------------------------------------
+# Run the reminder worker separately
+node worker.js
+```
 
-CREATE TABLE push_devices (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    device_platform TEXT NOT NULL,   -- ios / android / web / other
-    device_token    TEXT NOT NULL,
-    last_seen_at    TIMESTAMPTZ,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (user_id, device_token)
-);
+### Deploy
+- **API** → packaged and deployed to **AWS Lambda**; entry point `lambda.js`
+  (exported `handler`). All routes are served under the `/api/v1` base path.
+- **Worker** → built from `Dockerfile.worker` and run as an **AWS ECS** service.
 
-ALTER TABLE push_devices
-    ADD CONSTRAINT device_platform_chk
-    CHECK (device_platform IN ('ios','android','web','other'));
+---
 
-CREATE TABLE notification_preferences (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    profile_id          UUID REFERENCES patient_profiles(id) ON DELETE CASCADE,
-    allow_push          BOOLEAN NOT NULL DEFAULT TRUE,
-    allow_email         BOOLEAN NOT NULL DEFAULT FALSE,
-    quiet_hours_start   TIME,
-    quiet_hours_end     TIME,
-    timezone            TEXT NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (user_id, profile_id)
-);
+## API Overview
 
-CREATE TABLE notifications (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    profile_id      UUID REFERENCES patient_profiles(id) ON DELETE SET NULL,
-    type            TEXT NOT NULL,   -- medication_reminder / system / other
-    payload         JSONB NOT NULL,
-    scheduled_at    TIMESTAMPTZ,
-    sent_at         TIMESTAMPTZ,
-    status          TEXT NOT NULL DEFAULT 'pending', -- pending / sent / failed / cancelled
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT notifications_type_chk
-        CHECK (type IN ('medication_reminder','system','other')),
-    CONSTRAINT notifications_status_chk
-        CHECK (status IN ('pending','sent','failed','cancelled'))
-);
+All endpoints are mounted under **`/api/v1`**, for example:
 
---------------------------------------------------
--- 7. LEGAL & AUDIT
---------------------------------------------------
+```
+/api/v1/auth                 # register / login
+/api/v1/users                # user management
+/api/v1/patient-profiles     # patient profiles + sharing
+/api/v1/prescriptions        # prescriptions & items
+/api/v1/regimens             # medication regimens (dose schedules)
+/api/v1/intake               # intake (taken / missed) events
+/api/v1/symptoms             # symptom journal
+/api/v1/push-devices         # device registration for push
+/api/v1/notifications        # notifications + preferences
+/api/v1/legal-documents      # legal documents & acceptances
+```
 
-CREATE TABLE legal_documents (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    doc_type        TEXT NOT NULL,   -- terms_of_use / privacy_policy / disclaimer / other
-    version         TEXT NOT NULL,
-    title           TEXT NOT NULL,
-    content_url     TEXT,            -- link tới file/markdown
-    effective_at    TIMESTAMPTZ NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (doc_type, version),
-    CONSTRAINT legal_doc_type_chk
-        CHECK (doc_type IN ('terms_of_use','privacy_policy','disclaimer','other'))
-);
+---
 
-CREATE TABLE user_legal_acceptances (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    legal_document_id   UUID NOT NULL REFERENCES legal_documents(id) ON DELETE CASCADE,
-    accepted_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    ip_address          TEXT,
-    user_agent          TEXT,
-    UNIQUE (user_id, legal_document_id)
-);
+## Status
 
-
---------------------------------------------------
--- 8. INDEX PHỤ TRỢ
---------------------------------------------------
-
-CREATE INDEX idx_patient_profiles_owner ON patient_profiles(owner_user_id);
-CREATE INDEX idx_profile_shares_user ON profile_shares(user_id);
-
-CREATE INDEX idx_prescriptions_profile ON prescriptions(profile_id);
-CREATE INDEX idx_prescription_items_prescription ON prescription_items(prescription_id);
-
-CREATE INDEX idx_med_regimens_profile ON medication_regimens(profile_id);
-CREATE INDEX idx_med_regimens_prescription_item ON medication_regimens(prescription_item_id);
-
-CREATE INDEX idx_med_intake_regimen ON medication_intake_events(regimen_id);
-CREATE INDEX idx_med_intake_profile ON medication_intake_events(profile_id);
-
-CREATE INDEX idx_symptoms_profile ON symptom_entries(profile_id);
-CREATE INDEX idx_symptom_links_symptom ON symptom_medication_links(symptom_entry_id);
-CREATE INDEX idx_symptom_links_regimen ON symptom_medication_links(regimen_id);
-
-CREATE INDEX idx_push_devices_user ON push_devices(user_id);
-CREATE INDEX idx_notifications_user ON notifications(user_id);
-CREATE INDEX idx_notifications_profile ON notifications(profile_id);
-
-
-CREATE INDEX idx_interactions_sub1 ON drug_interactions(substance_id_1);
-CREATE INDEX idx_interactions_sub2 ON drug_interactions(substance_id_2);
+Built as a course capstone project. The iOS build was distributed to testers via
+**TestFlight**; the Android client is built with **EAS Build**.
